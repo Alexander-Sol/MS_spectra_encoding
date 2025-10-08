@@ -7,6 +7,9 @@ __pycache__/
 # C extensions
 *.so
 
+#mzML Files (Too big to push)
+*.mzML
+
 # Distribution / packaging
 .Python
 build/
