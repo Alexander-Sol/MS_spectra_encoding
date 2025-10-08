@@ -183,9 +183,9 @@ class SimilarityPreservationComplete(Scene):
         t_group.arrange(RIGHT, buff=0.5).next_to(f_group, DOWN, buff=1.5)
         
         # Labels for the groups
-        f_label = Text("Non-hashed Vectors (original)", font_size=24, color=GREEN).next_to(f_group, UP, buff=0.3)
-        t_label = Text("Hashed Vectors (compressed)", font_size=24, color=RED).next_to(t_group, UP, buff=0.3)
-        
+        f_label = Text("Non-hashed Vectors (original)", font_size=24, color=GREEN).next_to(f_group, UP, buff=0.7)
+        t_label = Text("Hashed Vectors (compressed)", font_size=24, color=RED).next_to(t_group, DOWN, buff=0.7)
+        # above and below the groups.
         # Display the vectors and labels
         self.play(Write(f_label), Create(f_group))
         self.play(Write(t_label), Create(t_group))
@@ -208,20 +208,20 @@ class SimilarityPreservationComplete(Scene):
             f_group[0].get_bottom(), 
             f_group[3].get_bottom(), 
             color=YELLOW, 
-            angle=0.5
+            angle=0.3
         )
         sim_f = Text("similarity", font_size=20, color=YELLOW).next_to(arrow_f, DOWN, buff=0.1)
         
         arrow_t = CurvedArrow(
-            t_group[0].get_bottom(), 
-            t_group[3].get_bottom(), 
+            t_group[0].get_top(), 
+            t_group[3].get_top(), 
             color=YELLOW, 
-            angle=0.5
+            angle=0.3
         )
-        sim_t = Text("similarity", font_size=20, color=YELLOW).next_to(arrow_t, DOWN, buff=0.1)
-        
-        self.play(Create(arrow_f), Write(sim_f))
-        self.play(Create(arrow_t), Write(sim_t))
+
+        self.play(Create(arrow_f))
+        self.play(Create(arrow_t))
+        self.play(Write(sim_f))
         self.wait(0.5)
         
         # Explanation text
@@ -232,7 +232,7 @@ class SimilarityPreservationComplete(Scene):
             Text("• If this is true, our hashing preserves similarity relationships", font_size=22)
         ).arrange(DOWN, buff=0.3, aligned_edge=LEFT)
         
-        explanation.to_edge(DOWN, buff=1)
+        explanation.next_to(t_label, DOWN, buff=1)
         
         self.play(Write(explanation[0]))
         for i in range(1, len(explanation)):
@@ -252,11 +252,11 @@ class SimilarityPreservationComplete(Scene):
         self.wait(3)
         
         self.play(
-            FadeOut(t_group),
-            FadeOut(t_label),
-            FadeOut(highlight_box_t1), FadeOut(highlight_box_t4),
-            FadeOut(arrow_t),
-            FadeOut(sim_t),
+            # FadeOut(t_group),
+            # FadeOut(t_label),
+            # FadeOut(highlight_box_t1), FadeOut(highlight_box_t4),
+            # FadeOut(arrow_t),
+            # FadeOut(sim_t),
             FadeOut(conclusion)
         )
         
@@ -265,8 +265,8 @@ class SimilarityPreservationComplete(Scene):
         f4_values = np.array([1,1,1,0,0,0,1,1])
         
         # Create visual representation of the vectors with their values
-        f1_visual = Text(f"f₁ = {f1_values}", font_size=24, color=GREEN).move_to(LEFT * 4 + UP * 1)
-        f4_visual = Text(f"f₄ = {f4_values}", font_size=24, color=GREEN).move_to(LEFT * 4 + DOWN * 1)
+        f1_visual = Text(f"f₁ = {f1_values}", font_size=24, color=GREEN).next_to(t_label, DOWN + LEFT, buff=0.5)
+        f4_visual = Text(f"f₄ = {f4_values}", font_size=24, color=GREEN).next_to(f1_visual, DOWN, buff=0.5)
         
         self.play(Write(f1_visual), Write(f4_visual))
         self.wait(1)
@@ -277,10 +277,6 @@ class SimilarityPreservationComplete(Scene):
         self.play(Write(dissimilar_text))
         self.wait(2)
         
-        # Bring back hashed vectors to show the complete comparison
-        self.play(Write(t_label), Create(t_group))
-        
-        # Highlight the corresponding hashed vectors (t1 and t4)
         highlight_box_t1_dissim = SurroundingRectangle(t_group[0], color=YELLOW, buff=0.1)
         highlight_box_t4_dissim = SurroundingRectangle(t_group[3], color=YELLOW, buff=0.1)
         
@@ -297,10 +293,10 @@ class SimilarityPreservationComplete(Scene):
         # Show the hashed vector values (simplified representation)
         t1_values = np.array([0,1,0,1])  # Simplified 4-dimensional representation
         t4_values = np.array([1,0,1,0])  # Opposite pattern preserved
-        
-        t1_visual = Text(f"t₁ = {t1_values}", font_size=24, color=RED).move_to(RIGHT * 4 + UP * 1)
-        t4_visual = Text(f"t₄ = {t4_values}", font_size=24, color=RED).move_to(RIGHT * 4 + DOWN * 1)
-        
+
+        t1_visual = Text(f"t₁ = {t1_values}", font_size=24, color=RED).next_to(t_label, DOWN + RIGHT, buff=0.5)
+        t4_visual = Text(f"t₄ = {t4_values}", font_size=24, color=RED).next_to(t1_visual, DOWN, buff=0.5)
+
         self.play(Write(t1_visual), Write(t4_visual))
         self.wait(1)
         
@@ -318,7 +314,7 @@ class SimilarityPreservationComplete(Scene):
         
         # Clean up the dissimilarity demonstration
         self.play(FadeOut(f1_visual), FadeOut(f4_visual), FadeOut(t1_visual), FadeOut(t4_visual), 
-                 FadeOut(dissimilar_text), FadeOut(preservation_text))
+                 FadeOut(dissimilar_text), FadeOut(preservation_text), FadeOut(arrow_f), FadeOut(arrow_t))
         
         # Now smoothly transition from dissimilar (f1/f4, t1/t4) to similar (f1/f2, t1/t2) pairs
         transition_text = Text("Now let's examine a pair that should be similar...", 
