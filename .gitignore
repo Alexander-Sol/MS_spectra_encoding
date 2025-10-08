@@ -2,9 +2,13 @@
 __pycache__/
 *.py[codz]
 *$py.class
+.DS_Store
 
 # C extensions
 *.so
+
+#mzML Files (Too big to push)
+*.mzML
 
 # Distribution / packaging
 .Python
