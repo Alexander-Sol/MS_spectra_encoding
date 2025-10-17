@@ -7,19 +7,23 @@ class LoadSpectra:
     # This function should read in an mzml file and return an object of type SpectrumWithTransformations
     # Based off of get_MS2_object from Sam Payne lesson 4
     @classmethod
-    def get_MS2_object4(mzml_path: str, scan_number=8090) -> "SpectrumWithTransformation":
+    def get_MS2_object4(
+        cls,
+        mzml_path: str,
+        scan_number: int = 8090,
+    ) -> "SpectrumWithTransformation":
         print("HELWKDGJFNBWHYIGUEOO)ERGHBUIWJ")
         with mzml.MzML(mzml_path) as reader:
-            selected_spectrum = reader.get_by_index(scan_number - 1)
-            
+            selected_spectrum = reader.get_by_index(scan_number)
+
         mz_array = np.asarray(selected_spectrum["m/z array"], dtype=float)
         intensity_array = np.asarray(selected_spectrum["intensity array"], dtype=float)
-        scan_number = selected_spectrum["index"]
+        #scan_number = selected_spectrum["index"]
 
         return SpectrumWithTransformation(
         mz=mz_array,
         intensity=intensity_array,
-        scan_number=scan_number,
+        #scan_number=scan_number,
         annotation_dictionary=None,
         binned_mz=None,
         hashed_mz=None,
