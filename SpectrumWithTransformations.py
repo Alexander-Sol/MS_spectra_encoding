@@ -7,14 +7,14 @@ class SpectrumWithTransformation:
         mz: np.ndarray,
         intensity: np.ndarray,
         scan_number: int,
-        annotation_dictionary=None,
+        annotation_dictionary= dict,
         binned_mz=None,
         hashed_mz=None,
     ) -> None:
         self.mz = np.asarray(mz, dtype=float)
         self.intensity = np.asarray(intensity, dtype=float)
         self.scan_number = int(scan_number)
-        self.annotation_dictionary = annotation_dictionary
+        self.annotation_dictionary = dict(annotation_dictionary)
         self.binned_mz = None if binned_mz is None else np.asarray(binned_mz, dtype=float)
         self.hashed_mz = None if hashed_mz is None else np.asarray(hashed_mz, dtype=float)
 

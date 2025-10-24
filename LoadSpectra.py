@@ -1,62 +1,102 @@
 import numpy as np
 from pyteomics import mzml
 from SpectrumWithTransformations import SpectrumWithTransformation
+from spectrum_utils.proforma import Proteoform
 
 class LoadSpectra:
 
     # This function should read in an mzml file and return an object of type SpectrumWithTransformations
     # Based off of get_MS2_object from Sam Payne lesson 4
     @classmethod
-    def get_MS2_object4(
+    def get_MS2_object(
         cls,
         mzml_path: str,
-        scan_number: int = 8090,
+        scan_number: int,
+        peptide = None,
+        modifications_list = None
     ) -> "SpectrumWithTransformation":
-        print("HELWKDGJFNBWHYIGUEOO)ERGHBUIWJ")
-        with mzml.MzML(mzml_path) as reader:
-            selected_spectrum = reader.get_by_index(scan_number)
+        index = scan_number -1 #scan_number is 1-based, index is 0-based
+        with mzml.MzML(mzml_path, use_index=True) as reader: #use_index=True allows us to avoid reading through the entire mzml file
+            selected_spectrum = reader.get_by_index(index)
 
-        mz_array = np.asarray(selected_spectrum["m/z array"], dtype=float)
-        intensity_array = np.asarray(selected_spectrum["intensity array"], dtype=float)
-        #scan_number = selected_spectrum["index"]
+        mz_array = np.asarray(selected_spectrum['m/z array'])
+        intensity_array = np.asarray(selected_spectrum['intensity array'])
+        precursor_charge = int(selected_spectrum['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]['charge state'])
 
+        # Test to see if we accessed the correct scan: PASSED!
+        # precursor_mz = selected_spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
+        # print(precursor_mz)
+
+            #Create annotation dictionary:
+        annotation_dictionary = None
+        if peptide:
+            annotation_dictionary = cls.get_annotation_dictionary(
+                peptide,
+                precursor_charge,
+                modifications_list
+            )
+        
         return SpectrumWithTransformation(
-        mz=mz_array,
-        intensity=intensity_array,
-        #scan_number=scan_number,
-        annotation_dictionary=None,
-        binned_mz=None,
-        hashed_mz=None,
+            mz=mz_array,
+            intensity=intensity_array,
+            scan_number= scan_number,
+            annotation_dictionary=annotation_dictionary,
+            binned_mz=None,
+            hashed_mz=None,
         )
-            
+    
+    @staticmethod
+    def get_annotation_dictionary(
+        sequence,
+        precursor_charge,
+        modifications_list
+    ) -> dict:
+        annotation_dictionary = None
 
-    # def get_MS2_object(mzml_path, scan, peptide = None):
-    # su_spectrum = None
-    # with pyteomics.mzml.read(mzml_path) as spectra:
-    #     for spectrum in spectra:
-    #         scanNumber = int(spectrum['id'].split('=')[-1])
-    #         if scanNumber == scan:
-    #             # This finds the cooresponding values in the .mzml file to create our MS2
-    #             spectrum_id = spectrum['id']
-    #             mz = spectrum['m/z array']
-    #             intensity = spectrum['intensity array']
-    #             retention_time = spectrum['scanList']['scan'][0]['scan start time']
-    #             precursor_mz = spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
-    #             precursor_charge = int(spectrum['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]['charge state'])
+        fragment_tol_mass = 0.01 # We consider two peaks (actual and theoretical) "equivalent" if they are within +/- 0.01 Da
+        fragment_tol_mode = 'Da'
+        ion_types = 'by'
+        max_ion_charge = max(1, precursor_charge - 1)
 
-    #             su_spectrum = sus.MsmsSpectrum(spectrum_id, precursor_mz, precursor_charge, mz, intensity, retention_time=retention_time)
+        # Generate peptide fragments and calculate theoretical masses
+        # Based on spectrum_utils => fragment_annotation.py => get_theoretical_fragments
+        # N-terminal peptide fragments: (b ions)
+        base_fragments = []
+        proteoform = Proteoform(
+            sequence=sequence,
+            modifications=modifications_list
+        )
+        for ion_type in set("abc") & set(ion_types):
+            mod_i, mod_mass = 0, 0
+            for fragment_i in range(1, len(proteoform.sequence)):
+                fragment_sequence = proteoform.sequence[:fragment_i]
+                # Ignore unlocalized modifications.
+                while (
+                    proteoform.modifications is not None
+                    and mod_i < len(proteoform.modifications)
+                    and isinstance(proteoform.modifications[mod_i].position, str)
+                    and proteoform.modifications[mod_i].position != "N-term"
+                ):
+                    mod_i += 1
+                # Include prefix modifications.
+                while (
+                    proteoform.modifications is not None
+                    and mod_i < len(proteoform.modifications)
+                    and (
+                        proteoform.modifications[mod_i].position == "N-term"
+                        or (
+                            isinstance(
+                                proteoform.modifications[mod_i].position, int
+                            )
+                            and proteoform.modifications[mod_i].position
+                            < fragment_i
+                        )
+                    )
+                ):
+                    mod_mass += proteoform.modifications[mod_i].mass
+                    mod_i += 1
+                base_fragments.append(
+                    (fragment_sequence, ion_type, fragment_i, mod_mass)
+                )
+        return annotation_dictionary
 
-    #             # Process the spectrum
-    #             su_spectrum = (su_spectrum.filter_intensity(0.05, 100)
-    #                            .remove_precursor_peak(fragment_tol_mass=0.5, fragment_tol_mode='Da')
-    #                            .scale_intensity('root'))
-    #             break
-    # # Formatting
-    # if su_spectrum:
-    #     fragment_tol_mass = 0.5
-    #     fragment_tol_mode = 'Da'  ## for some reason, if I use 'ppm' it doesn't work
-
-    #     # If given the peptide, spec_utils can annotate the peaks
-    #     if peptide:
-    #       su_spectrum = su_spectrum.annotate_proforma(peptide, fragment_tol_mass, fragment_tol_mode, ion_types='by', max_ion_charge=2)
-    # return su_spectrum
