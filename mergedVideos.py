@@ -14,80 +14,218 @@ def make_title(scene: Scene, text="Similarity Preservation in Spectral Hashing")
 # Comprehensive merged scene that combines all the individual scenes
 class SimilarityPreservationComplete(Scene):
     def construct(self):
-        # ========== SECTION 1: Title and Introduction ==========
-        title = make_title(self, "Similarity Preservation in Spectral Hashing")
+        # ========== SECTION 1: Explain binning briefly ==========
+        title = make_title(self, "Spectral Binning and Hashing")
         self.play(FadeOut(title))
-        pec_title = Text("Let's go over what we've already accomplished!", font_size=28).move_to(title.get_center())
-        self.play(Write(pec_title))
-        self.play(FadeOut(pec_title))
-        spec_title = Text("Step 1: Original Spectra", font_size=28).move_to(title.get_center())
-        self.play(Write(spec_title))
         
-        spec_motivation = Text("Using 4 spectra, we'll show that", font_size=20).move_to(title.get_center())
-        spec_motivation2 = Text("they can be proven to be similar in both their hashed and nonhashed versions.", font_size=20).next_to(spec_motivation, DOWN, buff=0.5)
-        # self.play(Transform(spec_title, spec_motivation))
-        self.play(FadeOut(spec_title))
-        self.play(Write(spec_motivation))
-        self.play(Write(spec_motivation2))
-        self.wait(2)
-        spectra_group = VGroup()
-        for i, label in enumerate(["s_1", "s_2", "s_3", "s_4"]):
-            box = Rectangle(width=1.5, height=0.8, color=BLUE)
-            txt = MathTex(label, font_size=30)
-            spectra_group.add(VGroup(box, txt).arrange(DOWN, buff=0.1))
-
-        spectra_group.arrange(RIGHT, buff=0.5).shift(DOWN * 0.5)
-        self.play(Create(spectra_group))
-        self.wait(2)
-        self.play(FadeOut(spec_motivation, spectra_group,spec_motivation2))
         
-        # ========== SECTION 2: Feature Vectors ==========
-        step2_title = Text("Step 2: Non-hashed Feature Vectors", font_size=28).move_to(title.get_center())
-        self.play(Write(step2_title))
-        non_hashed_group = VGroup()
-        for i, label in enumerate(["f_1", "f_2", "f_3", "f_4"]):
-            box = Rectangle(width=3, height=0.8, color=GREEN)
-            lbl = MathTex(label, font_size=28)
-            dim = Text("(8800-dim)", font_size=22, color=GRAY)
-            non_hashed_group.add(VGroup(box, lbl, dim).arrange(DOWN, buff=0.05))
+        # ========== Data ==========
+        # Create the two sets of vectors (simplified representations)
+        # Define colors for the bins (matching the image style)
+        bin_colors = [BLUE, ORANGE, GREEN, RED, PURPLE, PINK, YELLOW, TEAL]
+        
+        # Create specific color orderings and positions for each spectrum
+        # f1 and f2 should be very similar (same colors, similar positions)
+        # f4 should be radically different from f1 (different colors, different positions)
+        
+        # Define colors for each spectrum
+        f1_colors = [BLUE, ORANGE, GREEN, RED, PURPLE, PINK, YELLOW, TEAL]
+        f2_colors = [BLUE, ORANGE, GREEN, RED, PURPLE, PINK, YELLOW, TEAL]  # Same as f1 (similar)
+        f3_colors = [PINK, TEAL, ORANGE, BLUE, YELLOW, GREEN, RED, PURPLE]  # Different ordering
+        f4_colors = [YELLOW, PINK, PURPLE, TEAL, RED, ORANGE, BLUE, GREEN]  # Radically different from f1
+        
+        spectrum_color_orders = [f1_colors, f2_colors, f3_colors, f4_colors]
+        
+        # Define positions for each spectrum
+        # f1: positions with some gaps
+        f1_positions = [0, 2, 4, 7, 9, 11, 14, 16]
+        # f2: very similar to f1 (only slightly shifted, mostly same)
+        f2_positions = [0, 2, 4, 7, 9, 12, 14, 16]  # Only position 11->12 changed
+        # f3: different pattern
+        f3_positions = [1, 3, 5, 8, 10, 12, 15, 17]
+        # f4: radically different positions from f1
+        f4_positions = [1, 3, 6, 8, 10, 13, 15, 18]
+        
+        spectrum_positions = [f1_positions, f2_positions, f3_positions, f4_positions]
+        
+        # Define bar heights for each spectrum
+        # f1 and f2 should have very similar heights
+        f1_heights = [0.5, 0.3, 0.55, 0.4, 0.45, 0.35, 0.5, 0.4]
+        f2_heights = [0.5, 0.32, 0.53, 0.4, 0.45, 0.36, 0.5, 0.42]  # Very similar to f1
+        f3_heights = [0.4, 0.5, 0.3, 0.45, 0.35, 0.5, 0.4, 0.55]
+        f4_heights = [0.35, 0.45, 0.4, 0.5, 0.3, 0.55, 0.38, 0.48]  # Different from f1
 
-        non_hashed_group.arrange(RIGHT, buff=0.3).shift(UP * 0.5)
-        self.play(Create(non_hashed_group))
+        # Create a title for the spectrum scene
+        spectrum_title = Text("Mass Spectrum Visualization", font_size=32, color=YELLOW).to_edge(UP, buff=0.5)
+        self.play(Write(spectrum_title))
         self.wait(1)
-        self.play(FadeOut(step2_title))
         
-        step3_title = Text("Step 3: Hashed Feature Vectors", font_size=28).move_to(title.get_center())
-        self.play(Write(step3_title))
-
-        hashed_group = VGroup()
-        for i, label in enumerate(["t_1", "t_2", "t_3", "t_4"]):
-            box = Rectangle(width=1.5, height=0.8, color=RED)
-            lbl = MathTex(label, font_size=28)
-            dim = Text("(400-dim)", font_size=22, color=GRAY)
-            hashed_group.add(VGroup(box, lbl, dim).arrange(DOWN, buff=0.05))
-        hashed_group.arrange(RIGHT, buff=0.3).shift(DOWN * 1.5)
+        # Create a spectrum visualization using f1_heights, f1_positions, and f1_colors
+        # Set up axes for the spectrum
+        axes = Axes(
+            x_range=[0, 20, 2],
+            y_range=[0, 0.7, 0.1],
+            x_length=10,
+            y_length=4,
+            axis_config={"include_numbers": False, "color": GRAY},
+            tips=False
+        ).shift(DOWN * 0.5)
         
-        arrows = VGroup()
-        for i in range(4):
-            arrow = Arrow(
-            non_hashed_group[i].get_bottom(),
-            hashed_group[i].get_top(),
-            color=YELLOW,
-            stroke_width=2
-            )
-            arrows.add(arrow)
-
-        self.play(Create(arrows))
-        self.play(Create(hashed_group))
-        unhashed_text = Text("Non-hashed Vectors", font_size=24).next_to(non_hashed_group, UP * 0.5, buff=0.5)
-        hashed_text = Text("Hashed Vectors", font_size=24).next_to(hashed_group, DOWN * 0.5, buff=0.5)
-        self.play(Write(hashed_text), Transform(step3_title, unhashed_text))
+        # Add labels
+        x_label = Text("m/z", font_size=24).next_to(axes.x_axis, DOWN, buff=0.2)
+        y_label = Text("Intensity", font_size=24).rotate(90 * DEGREES).next_to(axes.y_axis, LEFT, buff=0.3)
+        
+        # Create vertical lines (stems) for each peak
+        spectrum_lines = VGroup()
+        for i, pos in enumerate(f1_positions):
+            height = f1_heights[i]
+            color = f1_colors[i]
+            
+            # Create a vertical line from the x-axis to the peak height
+            start_point = axes.c2p(pos, 0)
+            end_point = axes.c2p(pos, height)
+            line = Line(start_point, end_point, color=color, stroke_width=4)
+            spectrum_lines.add(line)
+        
+        # Display the spectrum
+        self.play(Create(axes), Write(x_label), Write(y_label))
+        self.play(Create(spectrum_lines))
+        self.wait(4)
+        
+        # Instead of fading out, make the spectrum smaller
+        spectrum_group = VGroup(axes, x_label, y_label, spectrum_lines)
+        self.play(
+            spectrum_group.animate.scale(0.5).to_edge(UP, buff=1.5),
+            FadeOut(spectrum_title)
+        )
+        self.wait(1)
+        
+        # Create an arrow pointing down from the spectrum
+        arrow_to_f1 = Arrow(
+            spectrum_group.get_bottom(),
+            spectrum_group.get_bottom() + DOWN * 0.8,
+            color=WHITE,
+            buff=0.1
+        )
+        self.play(Create(arrow_to_f1))
+        self.wait(1)
+        
+        # Create f1 box (same width as the small spectrum)
+        spectrum_width = spectrum_group.width
+        f1_box = Rectangle(width=spectrum_width, height=0.7, color=GREEN, fill_opacity=0.0, stroke_width=2)
+        f1_box.next_to(arrow_to_f1, DOWN, buff=0.3)
+        
+        # Get the color order, positions, and heights for f1
+        colors_for_f1 = f1_colors
+        colored_positions_f1 = f1_positions
+        bar_heights_f1 = f1_heights
+        
+        # Total positions span from first to last colored bar
+        min_pos_f1 = min(colored_positions_f1)
+        max_pos_f1 = max(colored_positions_f1)
+        num_total_bars_f1 = max_pos_f1 - min_pos_f1 + 1
+        bar_width_f1 = (f1_box.width - 0.2) / num_total_bars_f1
+        
+        bars_f1 = VGroup()
+        for j in range(min_pos_f1, max_pos_f1 + 1):
+            x_pos = f1_box.get_left()[0] + 0.1 + (j - min_pos_f1) * bar_width_f1 + bar_width_f1/2
+            
+            if j in colored_positions_f1:
+                # Colored bar with varying height
+                bar_idx = colored_positions_f1.index(j)
+                bar = Rectangle(
+                    width=bar_width_f1 * 0.9,
+                    height=bar_heights_f1[bar_idx],
+                    color=colors_for_f1[bar_idx],
+                    fill_opacity=0.8,
+                    stroke_width=0
+                ).move_to([x_pos, f1_box.get_center()[1], 0])
+                bars_f1.add(bar)
+            else:
+                # Empty/whitespace bar
+                empty_bar = Rectangle(
+                    width=bar_width_f1 * 0.9,
+                    height=0.5,
+                    color=GRAY,
+                    fill_opacity=0.0,
+                    stroke_width=0.5,
+                    stroke_opacity=0.1
+                ).move_to([x_pos, f1_box.get_center()[1], 0])
+                bars_f1.add(empty_bar)
+        
+        f1_label_text = MathTex(r"f_1", font_size=30, color=GREEN).next_to(f1_box, DOWN, buff=0.15)
+        f1_full = VGroup(f1_box, bars_f1, f1_label_text)
+        
+        # Display f1
+        self.play(Create(f1_box), Create(bars_f1), Write(f1_label_text))
+        self.wait(2)
+        
+        # Fade out spectrum and arrow, then move f1 up
+        self.play(FadeOut(spectrum_group), FadeOut(arrow_to_f1))
+        self.play(f1_full.animate.shift(UP * 2))
+        self.wait(1)
+        
+        # Create t1 box below f1 (smaller, hashed version)
+        t1_box = Rectangle(width=spectrum_width * 0.67, height=0.7, color=RED, fill_opacity=0.0, stroke_width=2)
+        t1_box.move_to(f1_box.get_center() + DOWN * 2.5)
+        
+        # Use t1 positions and heights
+        t1_positions_data = [0, 1, 3, 4, 6, 7, 9, 10]
+        t1_heights_data = [0.5, 0.3, 0.55, 0.4, 0.45, 0.35, 0.5, 0.4]
+        colors_for_t1 = f1_colors
+        
+        min_pos_t1 = min(t1_positions_data)
+        max_pos_t1 = max(t1_positions_data)
+        num_total_bars_t1 = max_pos_t1 - min_pos_t1 + 1
+        bar_width_t1 = (t1_box.width - 0.2) / num_total_bars_t1
+        
+        bars_t1 = VGroup()
+        for j in range(min_pos_t1, max_pos_t1 + 1):
+            x_pos = t1_box.get_left()[0] + 0.1 + (j - min_pos_t1) * bar_width_t1 + bar_width_t1/2
+            
+            if j in t1_positions_data:
+                bar_idx = t1_positions_data.index(j)
+                bar = Rectangle(
+                    width=bar_width_t1 * 0.9,
+                    height=t1_heights_data[bar_idx],
+                    color=colors_for_t1[bar_idx],
+                    fill_opacity=0.8,
+                    stroke_width=0
+                ).move_to([x_pos, t1_box.get_center()[1], 0])
+                bars_t1.add(bar)
+            else:
+                empty_bar = Rectangle(
+                    width=bar_width_t1 * 0.9,
+                    height=0.5,
+                    color=GRAY,
+                    fill_opacity=0.0,
+                    stroke_width=0.5,
+                    stroke_opacity=0.1
+                ).move_to([x_pos, t1_box.get_center()[1], 0])
+                bars_t1.add(empty_bar)
+        
+        t1_label_text = MathTex(r"t_1", font_size=30, color=RED).next_to(t1_box, DOWN, buff=0.15)
+        t1_full = VGroup(t1_box, bars_t1, t1_label_text)
+        
+        # Create arrow from f1 to t1
+        arrow_f1_to_t1 = Arrow(
+            f1_full.get_bottom(),
+            t1_full.get_top(),
+            color=WHITE,
+            buff=0.2
+        )
+        
+        # Display arrow and t1
+        self.play(Create(arrow_f1_to_t1))
+        self.play(Create(t1_box), Create(bars_t1), Write(t1_label_text))
         self.wait(3)
         
-        # Clear the screen for next section
-        self.play(FadeOut(step3_title, unhashed_text, hashed_text, non_hashed_group, hashed_group, arrows))
+        # Fade out everything before next section
+        self.play(FadeOut(f1_full), FadeOut(t1_full), FadeOut(arrow_f1_to_t1))
         
-        # ========== SECTION 3: Similarity Explanation ==========
+        
+        # ========== SECTION 2: Similarity preservation ==========
+
         understanding_title = Text("Understanding Similarity Preservation", font_size=32, color=YELLOW).move_to(title.get_center())
         self.play(Write(understanding_title))
         self.wait(1)
@@ -155,40 +293,6 @@ class SimilarityPreservationComplete(Scene):
         # Explanation about preservation
         # All fade out
 
-        # Create the two sets of vectors (simplified representations)
-        # Define colors for the bins (matching the image style)
-        bin_colors = [BLUE, ORANGE, GREEN, RED, PURPLE, PINK, YELLOW, TEAL]
-        
-        # Create specific color orderings and positions for each spectrum
-        # f1 and f2 should be very similar (same colors, similar positions)
-        # f4 should be radically different from f1 (different colors, different positions)
-        
-        # Define colors for each spectrum
-        f1_colors = [BLUE, ORANGE, GREEN, RED, PURPLE, PINK, YELLOW, TEAL]
-        f2_colors = [BLUE, ORANGE, GREEN, RED, PURPLE, PINK, YELLOW, TEAL]  # Same as f1 (similar)
-        f3_colors = [PINK, TEAL, ORANGE, BLUE, YELLOW, GREEN, RED, PURPLE]  # Different ordering
-        f4_colors = [YELLOW, PINK, PURPLE, TEAL, RED, ORANGE, BLUE, GREEN]  # Radically different from f1
-        
-        spectrum_color_orders = [f1_colors, f2_colors, f3_colors, f4_colors]
-        
-        # Define positions for each spectrum
-        # f1: positions with some gaps
-        f1_positions = [0, 2, 4, 7, 9, 11, 14, 16]
-        # f2: very similar to f1 (only slightly shifted, mostly same)
-        f2_positions = [0, 2, 4, 7, 9, 12, 14, 16]  # Only position 11->12 changed
-        # f3: different pattern
-        f3_positions = [1, 3, 5, 8, 10, 12, 15, 17]
-        # f4: radically different positions from f1
-        f4_positions = [1, 3, 6, 8, 10, 13, 15, 18]
-        
-        spectrum_positions = [f1_positions, f2_positions, f3_positions, f4_positions]
-        
-        # Define bar heights for each spectrum
-        # f1 and f2 should have very similar heights
-        f1_heights = [0.5, 0.3, 0.55, 0.4, 0.45, 0.35, 0.5, 0.4]
-        f2_heights = [0.5, 0.32, 0.53, 0.4, 0.45, 0.36, 0.5, 0.42]  # Very similar to f1
-        f3_heights = [0.4, 0.5, 0.3, 0.45, 0.35, 0.5, 0.4, 0.55]
-        f4_heights = [0.35, 0.45, 0.4, 0.5, 0.3, 0.55, 0.38, 0.48]  # Different from f1
         
         spectrum_heights = [f1_heights, f2_heights, f3_heights, f4_heights]
         
@@ -315,37 +419,37 @@ class SimilarityPreservationComplete(Scene):
         self.play(Write(f_label), Create(f_group))
         self.play(Write(t_label), Create(t_group))
         
-        # Highlight boxes 1 and 4 in each set
-        highlight_box_f1 = SurroundingRectangle(f_group[0], color=YELLOW, buff=0.1)
-        highlight_box_f4 = SurroundingRectangle(f_group[3], color=YELLOW, buff=0.1)
-        highlight_box_t1 = SurroundingRectangle(t_group[0], color=YELLOW, buff=0.1)
-        highlight_box_t4 = SurroundingRectangle(t_group[3], color=YELLOW, buff=0.1)
+        # Highlight boxes 1 and 2 in each set (for similarity example)
+        highlight_box_f1_sim = SurroundingRectangle(f_group[0], color=YELLOW, buff=0.1)
+        highlight_box_f2_sim = SurroundingRectangle(f_group[1], color=YELLOW, buff=0.1)
+        highlight_box_t1_sim = SurroundingRectangle(t_group[0], color=YELLOW, buff=0.1)
+        highlight_box_t2_sim = SurroundingRectangle(t_group[1], color=YELLOW, buff=0.1)
         
         self.play(
-            Create(highlight_box_f1),
-            Create(highlight_box_f4),
-            Create(highlight_box_t1),
-            Create(highlight_box_t4)
+            Create(highlight_box_f1_sim),
+            Create(highlight_box_f2_sim),
+            Create(highlight_box_t1_sim),
+            Create(highlight_box_t2_sim)
         )
         
-        # Create similarity arrows between highlighted pairs
-        arrow_f = CurvedArrow(
-            f_group[0].get_bottom(), 
-            f_group[3].get_bottom(), 
+        # Create similarity arrows between highlighted pairs (from bounding boxes)
+        arrow_f_sim = CurvedArrow(
+            highlight_box_f1_sim.get_bottom(), 
+            highlight_box_f2_sim.get_bottom(), 
             color=YELLOW, 
             angle=0.3
         )
-        sim_f = Text("similarity", font_size=20, color=YELLOW).next_to(arrow_f, DOWN, buff=0.1)
+        sim_f = Text("similarity", font_size=20, color=YELLOW).next_to(arrow_f_sim, DOWN, buff=0.1)
         
-        arrow_t = CurvedArrow(
-            t_group[0].get_top(), 
-            t_group[3].get_top(), 
+        arrow_t_sim = CurvedArrow(
+            highlight_box_t1_sim.get_top(), 
+            highlight_box_t2_sim.get_top(), 
             color=YELLOW, 
             angle=-0.3
         )
 
-        self.play(Create(arrow_f))
-        self.play(Create(arrow_t))
+        self.play(Create(arrow_f_sim))
+        self.play(Create(arrow_t_sim))
         self.play(Write(sim_f))
         self.wait(2)
         
@@ -375,16 +479,16 @@ class SimilarityPreservationComplete(Scene):
         self.play(Write(conclusion))
         self.wait(3)
         
-        # Fade out EVERYTHING to show dissimilarity numerical example
+        # Fade out EVERYTHING to show similarity numerical example
         self.play(
             FadeOut(f_label), FadeOut(t_label),
             FadeOut(f_group), FadeOut(t_group),
-            FadeOut(highlight_box_t1), 
-            FadeOut(highlight_box_t4),
-            FadeOut(highlight_box_f1),
-            FadeOut(highlight_box_f4),
-            FadeOut(arrow_f),
-            FadeOut(arrow_t),
+            FadeOut(highlight_box_t1_sim), 
+            FadeOut(highlight_box_t2_sim),
+            FadeOut(highlight_box_f1_sim),
+            FadeOut(highlight_box_f2_sim),
+            FadeOut(arrow_f_sim),
+            FadeOut(arrow_t_sim),
             FadeOut(sim_f),
             FadeOut(conclusion)
         )
@@ -403,120 +507,7 @@ class SimilarityPreservationComplete(Scene):
         #     FadeOut(conclusion)
         # )
         
-        # ========== DISSIMILARITY NUMERICAL EXAMPLE ==========
-        dissim_title = Text("Example: DIS-similarity Preservation", font_size=28, color=YELLOW).to_edge(UP, buff=0.5)
-        self.play(Write(dissim_title))
-        self.wait(1)
-        
-        # Show numerical values for f1 and f4 to demonstrate dissimilarity
-        f1_values = np.array([0,0,0,1,1,1,0,0])
-        f4_values = np.array([1,1,1,0,0,0,1,1])
-        
-        # Create visual representation of the vectors with their values
-        f1_visual = MathTex(r"f_1 = " + str(f1_values).replace('\n', ''), font_size=28, color=GREEN).shift(UP * 2)
-        f4_visual = MathTex(r"f_4 = " + str(f4_values).replace('\n', ''), font_size=28, color=GREEN).next_to(f1_visual, DOWN, buff=0.5)
-        
-        self.play(Write(f1_visual))
-        self.play(Write(f4_visual))
-        self.wait(1)
-        
-        # Add explanation text
-        dissimilar_text = Text("These two vectors are exact opposites of each other!", 
-                              font_size=24, color=WHITE).next_to(f4_visual, DOWN, buff=0.8)
-        self.play(Write(dissimilar_text))
-        self.wait(2)
-        
-        # Show the hashed vector values (simplified representation)
-        t1_values = np.array([0,1,0,1])  # Simplified 4-dimensional representation
-        t4_values = np.array([1,0,1,0])  # Opposite pattern preserved
-
-        t1_visual = MathTex(r"t_1 = " + str(t1_values).replace('\n', ''), font_size=28, color=RED).next_to(dissimilar_text, DOWN, buff=0.8)
-        t4_visual = MathTex(r"t_4 = " + str(t4_values).replace('\n', ''), font_size=28, color=RED).next_to(t1_visual, DOWN, buff=0.5)
-
-        self.play(Write(t1_visual))
-        self.play(Write(t4_visual))
-        self.wait(1)
-        
-        # Explanation about hashed space dissimilarity
-        hashed_dissimilar_text = Text("In the hashed space, they remain dissimilar - the opposition is preserved!", 
-                                     font_size=24, color=WHITE).next_to(t4_visual, DOWN, buff=0.8)
-        self.play(Write(hashed_dissimilar_text))
-        self.wait(2)
-        
-        # Add a brief explanation about preservation
-        preservation_text = Text("This dissimilarity preservation is exactly what we want from good hashing!", 
-                               font_size=24, color=YELLOW).next_to(hashed_dissimilar_text, DOWN, buff=0.5)
-        self.play(Write(preservation_text))
-        self.wait(3)
-        
-        # Fade out all dissimilarity numerical examples
-        self.play(
-            FadeOut(dissim_title),
-            FadeOut(f1_visual), FadeOut(f4_visual),
-            FadeOut(t1_visual), FadeOut(t4_visual),
-            FadeOut(dissimilar_text),
-            FadeOut(hashed_dissimilar_text),
-            FadeOut(preservation_text)
-        )
-        self.wait(1)
-        
-        # ========== BRING BACK THE BOXES ==========
-        # Re-display the boxes and labels
-        self.play(Write(f_label), Create(f_group))
-        self.play(Write(t_label), Create(t_group))
-        self.wait(1)
-        
         # ========== SIMILARITY NUMERICAL EXAMPLE ==========
-        # Transition to similarity example
-        transition_text = Text("Now let's examine a pair that should be similar...", 
-                              font_size=24, color=YELLOW).next_to(t_label, DOWN, buff=0.5)
-        self.play(Write(transition_text))
-        self.wait(1)
-        
-        # Highlight f1, f2, t1, t2 boxes
-        highlight_box_f1_sim = SurroundingRectangle(f_group[0], color=YELLOW, buff=0.1)
-        highlight_box_f2_sim = SurroundingRectangle(f_group[1], color=YELLOW, buff=0.1)
-        highlight_box_t1_sim = SurroundingRectangle(t_group[0], color=YELLOW, buff=0.1)
-        highlight_box_t2_sim = SurroundingRectangle(t_group[1], color=YELLOW, buff=0.1)
-        
-        self.play(
-            Create(highlight_box_f1_sim), Create(highlight_box_f2_sim),
-            Create(highlight_box_t1_sim), Create(highlight_box_t2_sim)
-        )
-        
-        # Create arrows showing similarity within each space
-        arrow_f_sim = CurvedArrow(
-            f_group[0].get_bottom(), 
-            f_group[1].get_bottom(), 
-            color=YELLOW, 
-            angle=0.3
-        )
-        arrow_t_sim = CurvedArrow(
-            t_group[0].get_top(), 
-            t_group[1].get_top(), 
-            color=YELLOW, 
-            angle=-0.3
-        )
-        
-        sim_f_text = Text("similarity", font_size=20, color=YELLOW).next_to(arrow_f_sim, DOWN, buff=0.1)
-        
-        self.play(Create(arrow_f_sim), Create(arrow_t_sim))
-        self.play(Write(sim_f_text))
-        self.wait(2)
-        
-        # Fade EVERYTHING out for numerical example
-        self.play(
-            FadeOut(transition_text),
-            FadeOut(f_label), FadeOut(t_label),
-            FadeOut(f_group), FadeOut(t_group),
-            FadeOut(highlight_box_f1_sim), FadeOut(highlight_box_f2_sim),
-            FadeOut(highlight_box_t1_sim), FadeOut(highlight_box_t2_sim),
-            FadeOut(arrow_f_sim), FadeOut(arrow_t_sim),
-            FadeOut(sim_f_text)
-        )
-        self.wait(1)
-        
-        # Show clean numerical example for similarity
         sim_title = Text("Example: Similarity Preservation", font_size=28, color=YELLOW).to_edge(UP, buff=0.5)
         self.play(Write(sim_title))
         self.wait(1)
@@ -525,51 +516,165 @@ class SimilarityPreservationComplete(Scene):
         f1_similar = np.array([0,0,0,1,1,1,0,0])
         f2_similar = np.array([0,0,1,1,1,1,0,0])  # Very close to f1, just one bit different
         
-        # Show corresponding hashed values
-        t1_similar = np.array([0,1,0,1])  # Simplified 4-dimensional representation
-        t2_similar = np.array([0,1,1,1])  # Also similar pattern preserved
-        
-        # Create visual representation showing similarity in both spaces
-        f1_sim_visual = MathTex(r"f_1 = " + str(f1_similar).replace('\n', ''), font_size=28, color=GREEN).shift(UP * 2)
-        f2_sim_visual = MathTex(r"f_2 = " + str(f2_similar).replace('\n', ''), font_size=28, color=GREEN).next_to(f1_sim_visual, DOWN, buff=0.5)
+        # Create visual representation of the vectors with their values (larger and bolded)
+        f1_sim_visual = MathTex(r"\mathbf{f_1 = " + str(f1_similar).replace('\n', '') + "}", font_size=36, color=GREEN).shift(UP * 2)
+        f2_sim_visual = MathTex(r"\mathbf{f_2 = " + str(f2_similar).replace('\n', '') + "}", font_size=36, color=GREEN).next_to(f1_sim_visual, DOWN, buff=0.5)
         
         self.play(Write(f1_sim_visual))
         self.play(Write(f2_sim_visual))
         self.wait(1)
         
-        # Add explanation for similarity
+        # Add explanation text
         similar_text = Text("These vectors are very similar - only one position differs!", 
                            font_size=24, color=WHITE).next_to(f2_sim_visual, DOWN, buff=0.8)
         self.play(Write(similar_text))
         self.wait(2)
         
-        t1_sim_visual = MathTex(r"t_1 = " + str(t1_similar).replace('\n', ''), font_size=28, color=RED).next_to(similar_text, DOWN, buff=0.8)
-        t2_sim_visual = MathTex(r"t_2 = " + str(t2_similar).replace('\n', ''), font_size=28, color=RED).next_to(t1_sim_visual, DOWN, buff=0.5)
-        
+        # Show the hashed vector values (simplified representation)
+        t1_similar = np.array([0,1,0,1])  # Simplified 4-dimensional representation
+        t2_similar = np.array([0,1,1,1])  # Also similar pattern preserved
+
+        t1_sim_visual = MathTex(r"\mathbf{t_1 = " + str(t1_similar).replace('\n', '') + "}", font_size=36, color=RED).next_to(similar_text, DOWN, buff=0.8)
+        t2_sim_visual = MathTex(r"\mathbf{t_2 = " + str(t2_similar).replace('\n', '') + "}", font_size=36, color=RED).next_to(t1_sim_visual, DOWN, buff=0.5)
+
         self.play(Write(t1_sim_visual))
         self.play(Write(t2_sim_visual))
         self.wait(1)
         
+        # Explanation about hashed space similarity
         similar_text2 = Text("And in the hashed space, they remain similar - the relationship is preserved!", 
                             font_size=24, color=WHITE).next_to(t2_sim_visual, DOWN, buff=0.8)
         self.play(Write(similar_text2))
         self.wait(2)
         
-        # Final insight about the preservation principle
-        preservation_insight = Text("This is the key: similarity relationships are maintained across both spaces!", 
-                                   font_size=24, color=YELLOW).next_to(similar_text2, DOWN, buff=0.5)
-        self.play(Write(preservation_insight))
+        # Add a brief explanation about preservation
+        preservation_text = Text("This similarity preservation is exactly what we want from good hashing!", 
+                               font_size=24, color=YELLOW).next_to(t2_sim_visual, DOWN, buff=0.8)
+        self.play(ReplacementTransform(similar_text2, preservation_text))
         self.wait(3)
         
-        # Clean up the similarity numerical example
+        # Fade out all similarity numerical examples
         self.play(
             FadeOut(sim_title),
             FadeOut(f1_sim_visual), FadeOut(f2_sim_visual),
             FadeOut(t1_sim_visual), FadeOut(t2_sim_visual),
-            FadeOut(similar_text), FadeOut(similar_text2),
+            FadeOut(similar_text),
+            FadeOut(preservation_text)
+        )
+        self.wait(1)
+        
+                
+        # ========== BRING BACK THE BOXES ==========
+        # Re-display the boxes and labels
+        self.play(Write(f_label), Create(f_group))
+        self.play(Write(t_label), Create(t_group))
+        self.wait(1)
+        
+        # ========== DISSIMILARITY NUMERICAL EXAMPLE ==========
+        # Transition to dissimilarity example
+        transition_text = Text("Now let's examine a pair that should be dissimilar...", 
+                              font_size=24, color=YELLOW).next_to(t_label, DOWN, buff=0.5)
+        self.play(Write(transition_text))
+        self.wait(1)
+        
+        # Highlight f1, f4, t1, t4 boxes
+        highlight_box_f1_dissim = SurroundingRectangle(f_group[0], color=YELLOW, buff=0.1)
+        highlight_box_f4_dissim = SurroundingRectangle(f_group[3], color=YELLOW, buff=0.1)
+        highlight_box_t1_dissim = SurroundingRectangle(t_group[0], color=YELLOW, buff=0.1)
+        highlight_box_t4_dissim = SurroundingRectangle(t_group[3], color=YELLOW, buff=0.1)
+        
+        self.play(
+            Create(highlight_box_f1_dissim), Create(highlight_box_f4_dissim),
+            Create(highlight_box_t1_dissim), Create(highlight_box_t4_dissim)
+        )
+        
+        # Create arrows showing dissimilarity within each space (from bounding boxes)
+        arrow_f_dissim = CurvedArrow(
+            highlight_box_f1_dissim.get_bottom(), 
+            highlight_box_f4_dissim.get_bottom(), 
+            color=YELLOW, 
+            angle=0.3
+        )
+        arrow_t_dissim = CurvedArrow(
+            highlight_box_t1_dissim.get_top(), 
+            highlight_box_t4_dissim.get_top(), 
+            color=YELLOW, 
+            angle=-0.3
+        )
+        
+        dissim_f_text = Text("dissimilarity", font_size=20, color=YELLOW).next_to(arrow_f_dissim, DOWN, buff=0.1)
+        
+        self.play(Create(arrow_f_dissim), Create(arrow_t_dissim))
+        self.play(Write(dissim_f_text))
+        self.wait(2)
+        
+        # Fade EVERYTHING out for numerical example
+        self.play(
+            FadeOut(transition_text),
+            FadeOut(f_label), FadeOut(t_label),
+            FadeOut(f_group), FadeOut(t_group),
+            FadeOut(highlight_box_f1_dissim), FadeOut(highlight_box_f4_dissim),
+            FadeOut(highlight_box_t1_dissim), FadeOut(highlight_box_t4_dissim),
+            FadeOut(arrow_f_dissim), FadeOut(arrow_t_dissim),
+            FadeOut(dissim_f_text)
+        )
+        self.wait(1)
+        
+        # Show clean numerical example for dissimilarity
+        dissim_title = Text("Example: DIS-similarity Preservation", font_size=28, color=YELLOW).to_edge(UP, buff=0.5)
+        self.play(Write(dissim_title))
+        self.wait(1)
+        
+        # Show numerical values for f1 and f4 to demonstrate dissimilarity
+        f1_values = np.array([0,0,0,1,1,1,0,0])
+        f4_values = np.array([1,1,1,0,0,0,1,1])
+        
+        # Create visual representation showing dissimilarity in both spaces (larger and bolded)
+        f1_dissim_visual = MathTex(r"\mathbf{f_1 = " + str(f1_values).replace('\n', '') + "}", font_size=36, color=GREEN).shift(UP * 2)
+        f4_dissim_visual = MathTex(r"\mathbf{f_4 = " + str(f4_values).replace('\n', '') + "}", font_size=36, color=GREEN).next_to(f1_dissim_visual, DOWN, buff=0.5)
+        
+        self.play(Write(f1_dissim_visual))
+        self.play(Write(f4_dissim_visual))
+        self.wait(1)
+        
+        # Add explanation for dissimilarity
+        dissimilar_text = Text("These two vectors are exact opposites of each other!", 
+                              font_size=24, color=WHITE).next_to(f4_dissim_visual, DOWN, buff=0.8)
+        self.play(Write(dissimilar_text))
+        self.wait(2)
+        
+        # Show the hashed vector values (simplified representation)
+        t1_values = np.array([0,1,0,1])  # Simplified 4-dimensional representation
+        t4_values = np.array([1,0,1,0])  # Opposite pattern preserved
+        
+        t1_dissim_visual = MathTex(r"\mathbf{t_1 = " + str(t1_values).replace('\n', '') + "}", font_size=36, color=RED).next_to(dissimilar_text, DOWN, buff=0.8)
+        t4_dissim_visual = MathTex(r"\mathbf{t_4 = " + str(t4_values).replace('\n', '') + "}", font_size=36, color=RED).next_to(t1_dissim_visual, DOWN, buff=0.5)
+        
+        self.play(Write(t1_dissim_visual))
+        self.play(Write(t4_dissim_visual))
+        self.wait(1)
+        
+        hashed_dissimilar_text = Text("In the hashed space, they remain dissimilar - the opposition is preserved!", 
+                                     font_size=24, color=WHITE).next_to(t4_dissim_visual, DOWN, buff=0.8)
+        self.play(Write(hashed_dissimilar_text))
+        self.wait(2)
+        
+        # Final insight about the preservation principle
+        preservation_insight = Text("This is the key: dissimilarity relationships are also maintained across both spaces!", 
+                                font_size=24, color=YELLOW).next_to(t4_dissim_visual, DOWN, buff=0.8)
+        self.play(ReplacementTransform(hashed_dissimilar_text, preservation_insight))
+        self.wait(3)
+        
+        # Clean up the dissimilarity numerical example
+        self.play(
+            FadeOut(dissim_title),
+            FadeOut(f1_dissim_visual), FadeOut(f4_dissim_visual),
+            FadeOut(t1_dissim_visual), FadeOut(t4_dissim_visual),
+            FadeOut(dissimilar_text),
             FadeOut(preservation_insight)
         )
         self.wait(1)
+        
         
 # High-quality rendering configuration
 if __name__ == "__main__":
