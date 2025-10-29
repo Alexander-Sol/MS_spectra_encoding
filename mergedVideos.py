@@ -332,8 +332,8 @@ class SimilarityPreservationComplete(Scene):
         # Fade out all explanation texts and understanding_title
         self.play(FadeOut(explanation_texts), FadeOut(understanding_title))
         
-        # Fade out the minimized binned/hashed group too
-        self.play(FadeOut(combined_group))
+        # Fade out only the arrow, keep f1_full and t1_full visible for the transition
+        self.play(FadeOut(arrow_f1_to_t1))
         
         #       Animation Flow:
         # 1. Initial Box Display with Highlights
@@ -405,8 +405,8 @@ class SimilarityPreservationComplete(Scene):
                         height=bar_heights[0],  # Same height as other bars
                         color=GRAY,
                         fill_opacity=0.0,
-                        stroke_width=1.5,
-                        stroke_opacity=0.6
+                        stroke_width=0.5,
+                        stroke_opacity=0.0
                     ).move_to([x_pos, box.get_center()[1], 0])
                     bars.add(empty_bar)
             
@@ -463,21 +463,43 @@ class SimilarityPreservationComplete(Scene):
             t_group.add(VGroup(box, bars, text))
         t_group.arrange(RIGHT, buff=0.4).next_to(f_group, DOWN, buff=1.5)
         
-        # Labels for the groups
+        # Simple transition: Transform f1_full and t1_full labels to the new f_group[0] and t_group[0] positions
+        
+        # Transform the old f1 label to the new f1 position in f_group[0]
+        # f1_full structure: [0]=box, [1]=bars, [2]=label_text, [3]=binned_label (after .add())
+        # t1_full structure: [0]=box, [1]=bars, [2]=label_text, [3]=hashed_label (after .add())
+        old_f1_label = f1_full[2]  # The MathTex label from f1_full
+        old_t1_label = t1_full[2]  # The MathTex label from t1_full
+        
+        # Create f_group[0] and t_group[0] (boxes and bars only, without labels yet)
+        # Extract just the box and bars from f_group[0] and t_group[0]
+        new_f1_box_and_bars = VGroup(f_group[0][0], f_group[0][1])
+        new_t1_box_and_bars = VGroup(t_group[0][0], t_group[0][1])
+        
+        # Transform old labels to new label positions and create new boxes/bars
+        self.play(
+            ReplacementTransform(old_f1_label, f_group[0][2]),
+            ReplacementTransform(old_t1_label, t_group[0][2]),
+            Create(new_f1_box_and_bars),
+            Create(new_t1_box_and_bars)
+        )
+        
+        # Fade out the remaining parts of f1_full and t1_full (box, bars, and side labels)
+        # f1_full[3] is binned_label, t1_full[3] is hashed_label
+        old_f1_without_label = VGroup(f1_full[0], f1_full[1], f1_full[3])  # box, bars, binned_label
+        old_t1_without_label = VGroup(t1_full[0], t1_full[1], t1_full[3])  # box, bars, hashed_label
+        
+        self.play(
+            FadeOut(old_f1_without_label),
+            FadeOut(old_t1_without_label)
+        )
         f_label = Text("Non-hashed Vectors (original)", font_size=24, color=GREEN).next_to(f_group, UP, buff=0.3)
         t_label = Text("Hashed Vectors (compressed)", font_size=24, color=RED).next_to(t_group, DOWN, buff=0.3)
-        # above and below the groups.
         
-        # Transform f1_full and t1_full into their positions in f_group and t_group
-        self.play(
-            ReplacementTransform(f1_full, f_group[0]),
-            ReplacementTransform(t1_full, t_group[0])
-        )
-        self.wait(1)
+        # Create the rest of the groups
+        self.play(Create(f_group[1:]), Create(t_group[1:]), Write(f_label), Write(t_label))
         
-        # Now display the rest of the vectors and labels
-        self.play(Write(f_label), Create(f_group[1:]))
-        self.play(Write(t_label), Create(t_group[1:]))
+        self.wait(0.5)
         
         # Highlight boxes 1 and 2 in each set (for similarity example)
         highlight_box_f1_sim = SurroundingRectangle(f_group[0], color=YELLOW, buff=0.1)
