@@ -1,9 +1,10 @@
 import numpy as np
 from pyteomics import mzml
 from SpectrumWithTransformations import SpectrumWithTransformation
+
 from spectrum_utils.proforma import Proteoform
 
-class LoadSpectra:
+class LoadSpectra(SpectrumWithTransformation):
 
     # This function should read in an mzml file and return an object of type SpectrumWithTransformations
     # Based off of get_MS2_object from Sam Payne lesson 4
@@ -12,7 +13,8 @@ class LoadSpectra:
         cls,
         mzml_path: str,
         scan_number: int,
-        peptide = None,
+        full_sequence = None,
+        base_sequence = None,
         modifications_list = None
     ) -> "SpectrumWithTransformation":
         index = scan_number -1 #scan_number is 1-based, index is 0-based
@@ -26,24 +28,39 @@ class LoadSpectra:
         # Test to see if we accessed the correct scan: PASSED!
         # precursor_mz = selected_spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
         # print(precursor_mz)
-
-            #Create annotation dictionary:
-        annotation_dictionary = None
-        if peptide:
-            annotation_dictionary = cls.get_annotation_dictionary(
-                peptide,
-                precursor_charge,
-                modifications_list
-            )
         
-        return SpectrumWithTransformation(
-            mz=mz_array,
-            intensity=intensity_array,
-            scan_number= scan_number,
-            annotation_dictionary=annotation_dictionary,
+        ms2_object = SpectrumWithTransformation(
+            mz_array=mz_array,
+            intensity_array=intensity_array,
+            scan_number=scan_number,
             binned_mz=None,
             hashed_mz=None,
         )
+
+        #Create annotation dictionary:
+        annotation_dictionary = None
+        # if base_sequence:
+            # annotation_dictionary = cls.get_annotation_dictionary(
+                # base_sequence,
+                # precursor_charge,
+                # modifications_list
+            # )
+        if full_sequence:
+            ms2_object.annotate_proforma(
+                proforma_str = full_sequence,
+                fragment_tol_mass = 0.01, # We consider two peaks (actual and theoretical) "equivalent" if they are within +/- 0.01 Da
+                fragment_tol_mode = 'Da',
+                ion_types = 'by',
+                max_ion_charge = max(1, precursor_charge - 1)
+            )
+            print("Hello!")
+            
+        ms2_object.annotation_dictionary = annotation_dictionary
+
+        return ms2_object
+    
+    def annotate_proforma(self, proforma_str, fragment_tol_mass, fragment_tol_mode, ion_types = "by", max_ion_charge = None, neutral_losses = False):
+        return super().annotate_proforma(proforma_str, fragment_tol_mass, fragment_tol_mode, ion_types, max_ion_charge, neutral_losses)
     
     @staticmethod
     def get_annotation_dictionary(
