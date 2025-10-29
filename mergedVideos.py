@@ -21,26 +21,24 @@ class SimilarityPreservationComplete(Scene):
         
         # ========== Data ==========
         # Create the two sets of vectors (simplified representations)
-        # Define colors for the bins (matching the image style)
-        bin_colors = [BLUE, ORANGE, GREEN, RED, PURPLE, PINK, YELLOW, TEAL]
         
         # Create specific color orderings and positions for each spectrum
         # f1 and f2 should be very similar (same colors, similar positions)
         # f4 should be radically different from f1 (different colors, different positions)
         
         # Define colors for each spectrum
-        f1_colors = [BLUE, ORANGE, GREEN, RED, PURPLE, PINK, YELLOW, TEAL]
-        f2_colors = [BLUE, ORANGE, GREEN, RED, PURPLE, PINK, YELLOW, TEAL]  # Same as f1 (similar)
+        f1_colors = [RED, PINK, GREEN, RED, RED, PINK, GREEN, PINK] # red + green + pink
+        f2_colors = [RED, GREEN, GREEN, RED, RED, PINK, GREEN, PINK]  # Same as f1 (similar)
         f3_colors = [PINK, TEAL, ORANGE, BLUE, YELLOW, GREEN, RED, PURPLE]  # Different ordering
-        f4_colors = [YELLOW, PINK, PURPLE, TEAL, RED, ORANGE, BLUE, GREEN]  # Radically different from f1
+        f4_colors = [BLUE, BLUE, GRAY, BLUE, GRAY, GRAY_BROWN, GRAY, BLUE] # gray + blue (8 elements)
         
         spectrum_color_orders = [f1_colors, f2_colors, f3_colors, f4_colors]
         
         # Define positions for each spectrum
         # f1: positions with some gaps
-        f1_positions = [0, 2, 4, 7, 9, 11, 14, 16]
+        f1_positions = [1, 2, 4, 7, 9, 11, 14, 16]
         # f2: very similar to f1 (only slightly shifted, mostly same)
-        f2_positions = [0, 2, 4, 7, 9, 12, 14, 16]  # Only position 11->12 changed
+        f2_positions = [0, 2, 4, 7, 3, 12, 14, 16]  
         # f3: different pattern
         f3_positions = [1, 3, 5, 8, 10, 12, 15, 17]
         # f4: radically different positions from f1
@@ -48,12 +46,34 @@ class SimilarityPreservationComplete(Scene):
         
         spectrum_positions = [f1_positions, f2_positions, f3_positions, f4_positions]
         
-        # Define bar heights for each spectrum
-        # f1 and f2 should have very similar heights
-        f1_heights = [0.5, 0.3, 0.55, 0.4, 0.45, 0.35, 0.5, 0.4]
-        f2_heights = [0.5, 0.32, 0.53, 0.4, 0.45, 0.36, 0.5, 0.42]  # Very similar to f1
-        f3_heights = [0.4, 0.5, 0.3, 0.45, 0.35, 0.5, 0.4, 0.55]
-        f4_heights = [0.35, 0.45, 0.4, 0.5, 0.3, 0.55, 0.38, 0.48]  # Different from f1
+        # Define bar heights for the SPECTRUM visualization (varying heights for realism)
+        spectrum_f1_heights = [0.5, 0.3, 0.55, 0.4, 0.45, 0.35, 0.5, 0.4]
+        
+        # Define bar heights for FEATURE VECTORS (uniform height to fit the rectangle)
+        UNIFORM_HEIGHT = 0.6  # Single height for all bars in feature vectors
+        f1_heights = [UNIFORM_HEIGHT] * 8
+        f2_heights = [UNIFORM_HEIGHT] * 8
+        f3_heights = [UNIFORM_HEIGHT] * 8
+        f4_heights = [UNIFORM_HEIGHT] * 8
+        # Create dense colored bars inside with less whitespace between them
+        # t1 and t2 should be similar (corresponding to f1 and f2)
+        # t4 should be different (corresponding to f4)
+        
+        # Define positions for hashed versions (more compact)
+        t1_positions = [0, 1, 8, 3, 5, 7, 9, 10]
+        t2_positions = [0, 1, 8, 2, 5, 7, 9, 10]  # Very similar to t1 (same positions)
+        t3_positions = [5, 2, 1, 3, 6, 8, 7, 4]  # Different pattern
+        t4_positions = [1, 2, 4, 5, 7, 8, 10, 11]  # Radically different from t1
+        
+        t_spectrum_positions = [t1_positions, t2_positions, t3_positions, t4_positions]
+        
+        # Heights for t-boxes (uniform height)
+        t1_heights = [UNIFORM_HEIGHT] * 8
+        t2_heights = [UNIFORM_HEIGHT] * 8
+        t3_heights = [UNIFORM_HEIGHT] * 8
+        t4_heights = [UNIFORM_HEIGHT] * 8
+        
+        t_spectrum_heights = [t1_heights, t2_heights, t3_heights, t4_heights]
 
         # Create a title for the spectrum scene
         spectrum_title = Text("Mass Spectrum Visualization", font_size=32, color=YELLOW).to_edge(UP, buff=0.5)
@@ -61,7 +81,7 @@ class SimilarityPreservationComplete(Scene):
         self.wait(1)
         
         # Create a spectrum visualization using f1_heights, f1_positions, and f1_colors
-        # Set up axes for the spectrum
+        # Set up axes for the spectrum - centered, larger
         axes = Axes(
             x_range=[0, 20, 2],
             y_range=[0, 0.7, 0.1],
@@ -69,7 +89,7 @@ class SimilarityPreservationComplete(Scene):
             y_length=4,
             axis_config={"include_numbers": False, "color": GRAY},
             tips=False
-        ).shift(DOWN * 0.5)
+        ).to_edge(UP, buff=1.0)
         
         # Add labels
         x_label = Text("m/z", font_size=24).next_to(axes.x_axis, DOWN, buff=0.2)
@@ -78,7 +98,7 @@ class SimilarityPreservationComplete(Scene):
         # Create vertical lines (stems) for each peak
         spectrum_lines = VGroup()
         for i, pos in enumerate(f1_positions):
-            height = f1_heights[i]
+            height = spectrum_f1_heights[i]  # Use spectrum heights (varying)
             color = f1_colors[i]
             
             # Create a vertical line from the x-axis to the peak height
@@ -87,15 +107,15 @@ class SimilarityPreservationComplete(Scene):
             line = Line(start_point, end_point, color=color, stroke_width=4)
             spectrum_lines.add(line)
         
-        # Display the spectrum
+        # Display the spectrum without label initially
         self.play(Create(axes), Write(x_label), Write(y_label))
         self.play(Create(spectrum_lines))
         self.wait(4)
         
-        # Instead of fading out, make the spectrum smaller
+        # Group spectrum without label for now
         spectrum_group = VGroup(axes, x_label, y_label, spectrum_lines)
         self.play(
-            spectrum_group.animate.scale(0.5).to_edge(UP, buff=1.5),
+            spectrum_group.animate.scale(0.5).to_edge(UP, buff=0.8),
             FadeOut(spectrum_title)
         )
         self.wait(1)
@@ -103,17 +123,17 @@ class SimilarityPreservationComplete(Scene):
         # Create an arrow pointing down from the spectrum
         arrow_to_f1 = Arrow(
             spectrum_group.get_bottom(),
-            spectrum_group.get_bottom() + DOWN * 0.8,
+            spectrum_group.get_bottom() + DOWN * 1.0,
             color=WHITE,
             buff=0.1
         )
         self.play(Create(arrow_to_f1))
         self.wait(1)
         
-        # Create f1 box (same width as the small spectrum)
-        spectrum_width = spectrum_group.width
+        # Create f1 box (slightly smaller than the spectrum)
+        spectrum_width = spectrum_group.width * 0.9 
         f1_box = Rectangle(width=spectrum_width, height=0.7, color=GREEN, fill_opacity=0.0, stroke_width=2)
-        f1_box.next_to(arrow_to_f1, DOWN, buff=0.3)
+        f1_box.next_to(arrow_to_f1, DOWN, buff=0.2)
         
         # Get the color order, positions, and heights for f1
         colors_for_f1 = f1_colors
@@ -138,40 +158,51 @@ class SimilarityPreservationComplete(Scene):
                     height=bar_heights_f1[bar_idx],
                     color=colors_for_f1[bar_idx],
                     fill_opacity=0.8,
-                    stroke_width=0
+                    stroke_width=1
                 ).move_to([x_pos, f1_box.get_center()[1], 0])
                 bars_f1.add(bar)
             else:
-                # Empty/whitespace bar
+                # Empty/whitespace bar - now clearly visible
                 empty_bar = Rectangle(
                     width=bar_width_f1 * 0.9,
-                    height=0.5,
+                    height=bar_heights_f1[0],  # Same height as other bars
                     color=GRAY,
                     fill_opacity=0.0,
-                    stroke_width=0.5,
-                    stroke_opacity=0.1
+                    stroke_width=1.5,
+                    stroke_opacity=0.6
                 ).move_to([x_pos, f1_box.get_center()[1], 0])
                 bars_f1.add(empty_bar)
         
         f1_label_text = MathTex(r"f_1", font_size=30, color=GREEN).next_to(f1_box, DOWN, buff=0.15)
+        
+        # Don't create label yet - will add all three labels at once later
         f1_full = VGroup(f1_box, bars_f1, f1_label_text)
         
         # Display f1
         self.play(Create(f1_box), Create(bars_f1), Write(f1_label_text))
         self.wait(2)
         
-        # Fade out spectrum and arrow, then move f1 up
-        self.play(FadeOut(spectrum_group), FadeOut(arrow_to_f1))
-        self.play(f1_full.animate.shift(UP * 2))
+        # Create arrow from f1 to t1
+        arrow_f1_to_t1 = Arrow(
+            f1_label_text.get_bottom(),
+            f1_box.get_bottom() + DOWN * 1.5,
+            color=WHITE,
+            buff=0.1
+        )
+        self.play(Create(arrow_f1_to_t1))
         self.wait(1)
         
         # Create t1 box below f1 (smaller, hashed version)
         t1_box = Rectangle(width=spectrum_width * 0.67, height=0.7, color=RED, fill_opacity=0.0, stroke_width=2)
-        t1_box.move_to(f1_box.get_center() + DOWN * 2.5)
+        t1_box.next_to(arrow_f1_to_t1, DOWN, buff=0.2)
         
-        # Use t1 positions and heights
-        t1_positions_data = [0, 1, 3, 4, 6, 7, 9, 10]
-        t1_heights_data = [0.5, 0.3, 0.55, 0.4, 0.45, 0.35, 0.5, 0.4]
+        # Display the empty t1 box first
+        self.play(Create(t1_box))
+        self.wait(0.5)
+        
+        # Use t1 positions and heights from pre-defined arrays
+        t1_positions_data = t1_positions
+        t1_heights_data = t1_heights
         colors_for_t1 = f1_colors
         
         min_pos_t1 = min(t1_positions_data)
@@ -179,91 +210,131 @@ class SimilarityPreservationComplete(Scene):
         num_total_bars_t1 = max_pos_t1 - min_pos_t1 + 1
         bar_width_t1 = (t1_box.width - 0.2) / num_total_bars_t1
         
-        bars_t1 = VGroup()
+        # First, create the empty bars in t1 (all positions)
+        empty_bars_t1 = VGroup()
         for j in range(min_pos_t1, max_pos_t1 + 1):
             x_pos = t1_box.get_left()[0] + 0.1 + (j - min_pos_t1) * bar_width_t1 + bar_width_t1/2
-            
-            if j in t1_positions_data:
-                bar_idx = t1_positions_data.index(j)
-                bar = Rectangle(
+            empty_bar = Rectangle(
+                width=bar_width_t1 * 0.9,
+                height=t1_heights_data[0],  # Same height as other bars
+                color=GRAY,
+                fill_opacity=0.0,
+                stroke_width=1.5,
+                stroke_opacity=0.6
+            ).move_to([x_pos, t1_box.get_center()[1], 0])
+            empty_bars_t1.add(empty_bar)
+        
+        # Show the empty bar outlines
+        self.play(Create(empty_bars_t1))
+        self.wait(0.5)
+        
+        # Now animate the colored bars floating from f1 to t1
+        # We need to match the colored bars from f1 to their positions in t1
+        floating_bars = []
+        target_bars = []
+        
+        # Track which bars in bars_f1 are colored (based on positions)
+        colored_bar_counter = 0
+        for j in range(min_pos_f1, max_pos_f1 + 1):
+            if j in colored_positions_f1:
+                # This is a colored bar - find it in bars_f1
+                bar_idx_in_group = j - min_pos_f1
+                bar_f1 = bars_f1[bar_idx_in_group]
+                
+                # Create a copy of the bar from f1
+                bar_copy = bar_f1.copy()
+                floating_bars.append(bar_copy)
+                
+                # Calculate the target position in t1
+                # colored_bar_counter corresponds to the index in the color arrays
+                target_pos_idx = t1_positions_data[colored_bar_counter]
+                target_x = t1_box.get_left()[0] + 0.1 + (target_pos_idx - min_pos_t1) * bar_width_t1 + bar_width_t1/2
+                
+                # Create the target bar at the t1 position
+                target_bar = Rectangle(
                     width=bar_width_t1 * 0.9,
-                    height=t1_heights_data[bar_idx],
-                    color=colors_for_t1[bar_idx],
+                    height=t1_heights_data[colored_bar_counter],
+                    color=colors_for_t1[colored_bar_counter],
                     fill_opacity=0.8,
-                    stroke_width=0
-                ).move_to([x_pos, t1_box.get_center()[1], 0])
-                bars_t1.add(bar)
-            else:
-                empty_bar = Rectangle(
-                    width=bar_width_t1 * 0.9,
-                    height=0.5,
-                    color=GRAY,
-                    fill_opacity=0.0,
-                    stroke_width=0.5,
-                    stroke_opacity=0.1
-                ).move_to([x_pos, t1_box.get_center()[1], 0])
-                bars_t1.add(empty_bar)
+                    stroke_width=1
+                ).move_to([target_x, t1_box.get_center()[1], 0])
+                target_bars.append(target_bar)
+                
+                colored_bar_counter += 1
+        
+        # Add all floating bars to the scene at once
+        self.add(*floating_bars)
+        
+        # Animate all bars moving to their target positions simultaneously using ReplacementTransform
+        # This way the target_bars become the actual objects in the scene
+        animations = [ReplacementTransform(floating_bars[i], target_bars[i]) for i in range(len(floating_bars))]
+        self.play(*animations, run_time=2)
+        self.wait(1)
+        
+        # Collect all bars for t1 (now using the actual target_bars that are in the scene)
+        bars_t1 = VGroup(*target_bars, empty_bars_t1)
         
         t1_label_text = MathTex(r"t_1", font_size=30, color=RED).next_to(t1_box, DOWN, buff=0.15)
+        
+        # Don't create label yet - will add all three labels at once later
         t1_full = VGroup(t1_box, bars_t1, t1_label_text)
         
-        # Create arrow from f1 to t1
-        arrow_f1_to_t1 = Arrow(
-            f1_full.get_bottom(),
-            t1_full.get_top(),
-            color=WHITE,
-            buff=0.2
-        )
-        
-        # Display arrow and t1
-        self.play(Create(arrow_f1_to_t1))
-        self.play(Create(t1_box), Create(bars_t1), Write(t1_label_text))
+        # Display t1 label
+        self.play(Write(t1_label_text))
         self.wait(3)
         
-        # Fade out everything before next section
-        self.play(FadeOut(f1_full), FadeOut(t1_full), FadeOut(arrow_f1_to_t1))
+        # Now add all three labels at once on the right
+        spectrum_label = Text("Original Spectrum", font_size=24, color=BLUE).next_to(spectrum_group, RIGHT, buff=0.5)
+        binned_label = Text("Binned Spectrum", font_size=24, color=BLUE).next_to(f1_box, RIGHT, buff=0.5)
+        hashed_label = Text("Hashed Spectrum", font_size=24, color=BLUE).next_to(t1_box, RIGHT, buff=0.5)
+        
+        self.play(Write(spectrum_label), Write(binned_label), Write(hashed_label))
+        self.wait(2)
+        
+        # Update groups to include labels (but keep spectrum_label separate since it will fade with spectrum_group)
+        f1_full.add(binned_label)
+        t1_full.add(hashed_label)
         
         
         # ========== SECTION 2: Similarity preservation ==========
 
-        understanding_title = Text("Understanding Similarity Preservation", font_size=32, color=YELLOW).move_to(title.get_center())
+        understanding_title = Text("Understanding Similarity Preservation", font_size=32, color=YELLOW).to_edge(UP, buff=0.5)
+        
+        # First fade out the original spectrum, its label, and arrow, then minimize binned/hashed, then show title
+        self.play(FadeOut(spectrum_group), FadeOut(spectrum_label), FadeOut(arrow_to_f1))
+        
+        # Make f1 and t1 smaller and move them closer to the bottom
+        combined_group = VGroup(f1_full, arrow_f1_to_t1, t1_full)
+        self.play(
+            combined_group.animate.scale(0.6).to_edge(DOWN, buff=0.5)
+        )
+        
         self.play(Write(understanding_title))
         self.wait(1)
-        self.play(FadeOut(understanding_title))
         
-        # Create a group to hold all explanation texts
-        explanation_texts = []
+        # Create explanation texts using VGroup and arrange
+        explanation_texts = VGroup(
+            Text("We have the unhashed, binned feature vectors, and the hashed, compressed vectors.", font_size=22),
+            Text("How do we know that the hashing worked correctly?", font_size=22),
+            Text("We need to prove that similar vectors in the original space remain similar in the hashed space.", font_size=22),
+            Text("Alternatively, dissimilar vectors in the original space remain dissimilar in the hashed space.", font_size=22),
+            Text("Let's illustrate this with a simple example.", font_size=22)
+        ).arrange(DOWN, buff=0.3, aligned_edge=LEFT).next_to(understanding_title, DOWN, buff=0.5)
         
-        # First explanation text at the top
-        expl1 = Text("We have the unhashed, binned feature vectors, and the hashed, compressed vectors.", font_size=22).to_edge(UP, buff=0.5)
-        self.play(Write(expl1))
-        explanation_texts.append(expl1)
-        self.wait(2)
-        # Second explanation text below the first
-        expl2 = Text("How do we know that the hashing worked correctly?", font_size=22).next_to(expl1, DOWN, buff=0.3)
-        self.play(Write(expl2))
-        explanation_texts.append(expl2)
-        self.wait(2)
-        # Third explanation text below the second
-        expl3 = Text("We need to prove that similar vectors in the original space remain similar in the hashed space.", font_size=22).next_to(expl2, DOWN, buff=0.3)
-        self.play(Write(expl3))
-        explanation_texts.append(expl3)
-        self.wait(2)        
-        # Fourth explanation text below the third
-        expl4 = Text("Alternatively, dissimilar vectors in the original space remain dissimilar in the hashed space.", font_size=22).next_to(expl3, DOWN, buff=0.3)
-        self.play(Write(expl4))
-        explanation_texts.append(expl4)
-        self.wait(2)
-        # Fifth explanation text below the fourth
-        expl5 = Text("Let's illustrate this with a simple example.", font_size=22).next_to(expl4, DOWN, buff=0.3)
-        self.play(Write(expl5))
-        explanation_texts.append(expl5)
+        # Display each explanation text sequentially
+        for text in explanation_texts:
+            self.play(Write(text))
+            self.wait(2)
         
         # Wait a moment before proceeding
-        self.wait(3)
+        self.wait(1)
         
-        # Fade out all explanation texts at once
-        self.play(*[FadeOut(text) for text in explanation_texts])
+        # Fade out all explanation texts and understanding_title
+        self.play(FadeOut(explanation_texts), FadeOut(understanding_title))
+        
+        # Fade out the minimized binned/hashed group too
+        self.play(FadeOut(combined_group))
+        
         #       Animation Flow:
         # 1. Initial Box Display with Highlights
         # Shows f and t boxes with labels
@@ -317,7 +388,7 @@ class SimilarityPreservationComplete(Scene):
                 x_pos = box.get_left()[0] + 0.1 + (j - min_pos) * bar_width + bar_width/2
                 
                 if j in colored_positions:
-                    # Colored bar with varying height
+                    # Colored bar with uniform height
                     bar_idx = colored_positions.index(j)
                     bar = Rectangle(
                         width=bar_width * 0.9,
@@ -328,14 +399,14 @@ class SimilarityPreservationComplete(Scene):
                     ).move_to([x_pos, box.get_center()[1], 0])
                     bars.add(bar)
                 else:
-                    # Empty/whitespace bar (very faint outline to show the grid structure)
+                    # Empty/whitespace bar - now clearly visible
                     empty_bar = Rectangle(
                         width=bar_width * 0.9,
-                        height=0.5,
+                        height=bar_heights[0],  # Same height as other bars
                         color=GRAY,
                         fill_opacity=0.0,
-                        stroke_width=0.5,
-                        stroke_opacity=0.1
+                        stroke_width=1.5,
+                        stroke_opacity=0.6
                     ).move_to([x_pos, box.get_center()[1], 0])
                     bars.add(empty_bar)
             
@@ -351,26 +422,7 @@ class SimilarityPreservationComplete(Scene):
             # Use the same color order as the corresponding f_box
             colors_for_this_spectrum = spectrum_color_orders[i]
             
-            # Create dense colored bars inside with less whitespace between them
-            # t1 and t2 should be similar (corresponding to f1 and f2)
-            # t4 should be different (corresponding to f4)
-            
-            # Define positions for hashed versions (more compact)
-            t1_positions = [0, 1, 3, 4, 6, 7, 9, 10]  # Compact version of f1
-            t2_positions = [0, 1, 3, 4, 6, 7, 9, 10]  # Very similar to t1 (same positions)
-            t3_positions = [0, 2, 3, 5, 6, 8, 9, 11]  # Different pattern
-            t4_positions = [1, 2, 4, 5, 7, 8, 10, 11]  # Radically different from t1
-            
-            t_spectrum_positions = [t1_positions, t2_positions, t3_positions, t4_positions]
-            
-            # Heights for t-boxes (similar to corresponding f-boxes)
-            t1_heights = [0.5, 0.3, 0.55, 0.4, 0.45, 0.35, 0.5, 0.4]
-            t2_heights = [0.5, 0.32, 0.53, 0.4, 0.45, 0.36, 0.5, 0.42]  # Very similar to t1
-            t3_heights = [0.4, 0.5, 0.3, 0.45, 0.35, 0.5, 0.4, 0.55]
-            t4_heights = [0.35, 0.45, 0.4, 0.5, 0.3, 0.55, 0.38, 0.48]  # Different from t1
-            
-            t_spectrum_heights = [t1_heights, t2_heights, t3_heights, t4_heights]
-            
+            # Get positions and heights from pre-defined arrays
             colored_positions = t_spectrum_positions[i]
             bar_heights = t_spectrum_heights[i]
             
@@ -385,7 +437,7 @@ class SimilarityPreservationComplete(Scene):
                 x_pos = box.get_left()[0] + 0.1 + (j - min_pos) * bar_width + bar_width/2
                 
                 if j in colored_positions:
-                    # Same colored bars as in corresponding f_box
+                    # Same colored bars as in corresponding f_box with uniform height
                     bar_idx = colored_positions.index(j)
                     bar = Rectangle(
                         width=bar_width * 0.9,
@@ -396,14 +448,14 @@ class SimilarityPreservationComplete(Scene):
                     ).move_to([x_pos, box.get_center()[1], 0])
                     bars.add(bar)
                 else:
-                    # Empty/whitespace bar (very faint outline to show the grid structure)
+                    # Empty/whitespace bar - now clearly visible
                     empty_bar = Rectangle(
                         width=bar_width * 0.9,
-                        height=0.5,
+                        height=bar_heights[0],  # Same height as other bars
                         color=GRAY,
                         fill_opacity=0.0,
-                        stroke_width=0.5,
-                        stroke_opacity=0.1
+                        stroke_width=1.5,
+                        stroke_opacity=0.6
                     ).move_to([x_pos, box.get_center()[1], 0])
                     bars.add(empty_bar)
             
@@ -415,9 +467,17 @@ class SimilarityPreservationComplete(Scene):
         f_label = Text("Non-hashed Vectors (original)", font_size=24, color=GREEN).next_to(f_group, UP, buff=0.3)
         t_label = Text("Hashed Vectors (compressed)", font_size=24, color=RED).next_to(t_group, DOWN, buff=0.3)
         # above and below the groups.
-        # Display the vectors and labels
-        self.play(Write(f_label), Create(f_group))
-        self.play(Write(t_label), Create(t_group))
+        
+        # Transform f1_full and t1_full into their positions in f_group and t_group
+        self.play(
+            ReplacementTransform(f1_full, f_group[0]),
+            ReplacementTransform(t1_full, t_group[0])
+        )
+        self.wait(1)
+        
+        # Now display the rest of the vectors and labels
+        self.play(Write(f_label), Create(f_group[1:]))
+        self.play(Write(t_label), Create(t_group[1:]))
         
         # Highlight boxes 1 and 2 in each set (for similarity example)
         highlight_box_f1_sim = SurroundingRectangle(f_group[0], color=YELLOW, buff=0.1)
