@@ -21,18 +21,28 @@ class LoadSpectra(SpectrumWithTransformation):
         with mzml.MzML(mzml_path, use_index=True) as reader: #use_index=True allows us to avoid reading through the entire mzml file
             selected_spectrum = reader.get_by_index(index)
 
-        mz_array = np.asarray(selected_spectrum['m/z array'])
-        intensity_array = np.asarray(selected_spectrum['intensity array'])
+        # This finds the cooresponding values in the .mzml file to create our MS2 for a given scan (see the params)
+        spectrum_id = selected_spectrum['id']
+        retention_time = selected_spectrum['scanList']['scan'][0]['scan start time']
+        precursor_mz = selected_spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
         precursor_charge = int(selected_spectrum['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]['charge state'])
 
+        mz_array = np.asarray(selected_spectrum['m/z array'])
+        intensity_array = np.asarray(selected_spectrum['intensity array'])
+        
         # Test to see if we accessed the correct scan: PASSED!
         # precursor_mz = selected_spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
         # print(precursor_mz)
         
         ms2_object = SpectrumWithTransformation(
+            identifier=spectrum_id,
+            scan_number=scan_number,
+            precursor_mz=precursor_mz,
+            precursor_charge=precursor_charge,
             mz_array=mz_array,
             intensity_array=intensity_array,
-            scan_number=scan_number,
+            retention_time=retention_time,
+            annotation_dictionary=None,
             binned_mz=None,
             hashed_mz=None,
         )
@@ -45,6 +55,8 @@ class LoadSpectra(SpectrumWithTransformation):
                 # precursor_charge,
                 # modifications_list
             # )
+
+        return ms2_object    
         if full_sequence:
             ms2_object.annotate_proforma(
                 proforma_str = full_sequence,
