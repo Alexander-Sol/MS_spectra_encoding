@@ -6,8 +6,8 @@ class SpectrumWithTransformation(MsmsSpectrum):
 
     def __init__(
         self,
-        identifier: str,
         scan_number: int,
+        identifier: str,
         precursor_mz: float,
         precursor_charge: int,
         mz_array: Union[np.ndarray, Iterable],
@@ -15,11 +15,12 @@ class SpectrumWithTransformation(MsmsSpectrum):
         retention_time: float = np.nan,
         annotation_dictionary= None,
         binned_mz: Union[np.ndarray, Iterable]=None,
-        hashed_mz: Union[np.ndarray, Iterable]=None,
+        hashed_mz: Union[np.ndarray, Iterable]=None
     ) -> None:
+        
         super().__init__(identifier, precursor_mz, precursor_charge, mz_array, intensity_array, retention_time)
-        """ self.mz_array = np.asarray(mz_array, dtype=float)
-        self.intensity_array = np.asarray(intensity_array, dtype=float) """
+        # self.mz_array = np.asarray(mz_array, dtype=float)
+        # self.intensity_array = np.asarray(intensity_array, dtype=float)
         self.scan_number = int(scan_number)
         self.annotation_dictionary = None if binned_mz is None else dict(annotation_dictionary)
         self.binned_mz = None if binned_mz is None else np.asarray(binned_mz, dtype=float)
