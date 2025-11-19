@@ -173,7 +173,7 @@ def get_MS1_object(mzml_path, scan, peptide = None):
                 fig.update_layout(
                     title=f'MS1 Spectrum - Scan {scan}',
                     xaxis_title='m/z',
-                    yaxis_title='Relative Intensity (%)',
+                    yaxis_title='Relative Intensity',
                     plot_bgcolor='white',
                     xaxis=dict(
                         showline=True,
@@ -215,6 +215,11 @@ def plot_MS2(ms2_spectrum, title=None, parent=None):
             plotly_fig['layout']['yaxis']['linecolor'] = 'black'
             plotly_fig['layout']['yaxis']['linewidth'] = 2
             plotly_fig['layout']['yaxis']['title'] = 'Relative Intensity'
+            # Set the title if provided
+            if title:
+                plotly_fig['layout']['title'] = title
+            else:
+                plotly_fig['layout']['title'] = f'MS1 Spectrum - Scan {ms2_spectrum.scan_number}'
             plotly_fig.update_yaxes(range=[0, 1.05])  # Adjust y-axis range as needed
             return plotly_fig
         except Exception:
