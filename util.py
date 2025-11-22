@@ -10,7 +10,7 @@ except Exception:
     tls = None
     import logging
     logging.getLogger(__name__).warning(
-        "plotly.tools not available; CustomUtil.plot_MS2 will fall back to matplotlib display"
+        "plotly.tools not available; plot_MS2 will fall back to matplotlib display"
     )
 
 """A collection of utility functions for spectrum analysis.
@@ -30,11 +30,39 @@ PROTON_MASS = 1.007276466812
 HYDROGEN_MASS = 1.00784
 OXYGEN_MASS = 15.994915
 
+
+def get_all_MS2_objects(mzml_path):
+    ms2_spectra = []
+    with pyteomics.mzml.read(mzml_path) as spectra:
+        for spectrum in spectra:
+            # This finds the corresponding values in the .mzml file to create list of ms2 objs
+            ms_level = spectrum.get('ms level', 0)  # Use 'ms level' not 'level'
+            if ms_level == 2:
+                spectrum_id = spectrum['id']  # Use spectrum['id'], not spectrum['ms level'][0]
+                mz = spectrum['m/z array']
+                intensity = spectrum['intensity array']
+                retention_time = spectrum['scanList']['scan'][0]['scan start time']
+                precursor_mz = spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
+                precursor_charge = int(spectrum['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]['charge state'])
+
+                su_spectrum = sus.MsmsSpectrum(spectrum_id, precursor_mz, precursor_charge, mz, intensity, retention_time=retention_time)
+
+                # Process the spectrum
+                processed_spectrum = (su_spectrum.filter_intensity(0.05, 100)
+                                    .remove_precursor_peak(fragment_tol_mass=0.5, fragment_tol_mode='Da')
+                                    .scale_intensity('root'))
+
+                # Add processed spectrum to our list
+                ms2_spectra.append(processed_spectrum)
+
+
+    return ms2_spectra
+
 def make_ion_ladder(peptide, aa_mass = None):
     """Generate b and y ion ladders for a given peptide sequence.
     If you want to know the chemistry/physics behind this, you can read
     about it in this paper: https://cse.sc.edu/~rose/790B/papers/dancik.pdf """
-    aa_mass = aa_mass or CustomUtil.AMINO_ACID_DICT
+    aa_mass = aa_mass or AMINO_ACID_DICT
     b_ions = {}
     y_ions = {}
     mass_Hydrogen = HYDROGEN_MASS
