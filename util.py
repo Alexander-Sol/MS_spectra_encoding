@@ -4,6 +4,16 @@ import spectrum_utils.plot as sup
 import spectrum_utils.spectrum as sus
 import pyteomics
 from pyteomics import mzml, auxiliary
+import matplotlib.pyplot as plt
+from matplotlib.pyplot import subplots
+from rapidhash import rapidhash
+import numpy as np
+
+import numpy as np
+from scipy.spatial import distance
+import pandas as pd
+
+
 try:
     import plotly.tools as tls
 except Exception:
@@ -276,3 +286,321 @@ def add_subplot(plotly_fig, fig, row, col, showlegend=False, **kwargs):
     # Update layout properties if needed
     plotly_fig.update_layout(showlegend=showlegend)
 
+
+def plot_and_show_statistics_for_collisions(mzml_path):
+    def count_collisions(mz_array, bin_width):
+        """
+        Count how many peaks collide (fall into the same bin) for a given bin width.
+        
+        Returns: (num_collisions, num_peaks)
+        """
+        bin_ids = np.floor(np.asarray(mz_array) / bin_width).astype(np.int64)
+        buckets = {}
+        for i, b in enumerate(bin_ids):
+            buckets.setdefault(b, []).append(i)
+        
+        collision_count = sum(len(idxs) for idxs in buckets.values() if len(idxs) > 1)
+        return collision_count, len(mz_array)
+
+
+    def analyze_per_spectrum_collisions(mzml_path, bin_widths=(1.0, 0.01), max_spectra=None):
+        """
+        Analyze collision rates for each individual MS2 spectrum in an mzML file.
+        
+        Parameters
+        ----------
+        mzml_path : str
+            Path to the mzML file
+        bin_widths : tuple
+            Bin widths to compare (default: 1.0 Da and 0.01 Da)
+        max_spectra : int or None
+            Limit number of spectra to analyze (None = all)
+        
+        Returns
+        -------
+        DataFrame with collision statistics per spectrum
+        """
+        all_spectra = get_all_MS2_objects(mzml_path=mzml_path)
+        
+        if max_spectra:
+            all_spectra = all_spectra[:max_spectra]
+        
+        results = []
+        for i, ms2 in enumerate(all_spectra):
+            row = {'spectrum_idx': i, 'num_peaks': len(ms2.mz)}
+            
+            for width in bin_widths:
+                collisions, total = count_collisions(ms2.mz, width)
+                row[f'collisions_{width}Da'] = collisions
+                row[f'collision_rate_{width}Da'] = collisions / total if total > 0 else 0
+            
+            results.append(row)
+        
+        df = pd.DataFrame(results)
+        return df, all_spectra
+
+
+    # Analyze collisions per spectrum
+    collision_df, all_objs = analyze_per_spectrum_collisions(mzml_path, max_spectra=None)
+
+    # Summary statistics
+    print(f"=== Per-Spectrum Collision Analysis ===")
+    print(f"File: {mzml_path}")
+    print(f"Total spectra analyzed: {len(collision_df)}")
+    print(f"\n--- Bin Size = 1.0 Da ---")
+    print(f"  Spectra with collisions: {(collision_df['collisions_1.0Da'] > 0).sum()} / {len(collision_df)}")
+    print(f"  Mean collisions per spectrum: {collision_df['collisions_1.0Da'].mean():.2f}")
+    print(f"  Max collisions in a spectrum: {collision_df['collisions_1.0Da'].max()}")
+    print(f"  Mean collision rate: {collision_df['collision_rate_1.0Da'].mean()*100:.2f}%")
+
+    print(f"\n--- Bin Size = 0.01 Da ---")
+    print(f"  Spectra with collisions: {(collision_df['collisions_0.01Da'] > 0).sum()} / {len(collision_df)}")
+    print(f"  Mean collisions per spectrum: {collision_df['collisions_0.01Da'].mean():.2f}")
+    print(f"  Max collisions in a spectrum: {collision_df['collisions_0.01Da'].max()}")
+    print(f"  Mean collision rate: {collision_df['collision_rate_0.01Da'].mean()*100:.2f}%")
+
+    # Visualization: Distribution of collision counts per spectrum
+    fig, axes = subplots(1, 2, figsize=(14, 5))
+
+    # Left: 1.0 Da bin collisions
+    axes[0].hist(collision_df['collisions_1.0Da'], bins=30, alpha=0.7, color='coral', edgecolor='black')
+    axes[0].axvline(collision_df['collisions_1.0Da'].mean(), color='red', linestyle='--', 
+                    linewidth=2, label=f"Mean: {collision_df['collisions_1.0Da'].mean():.1f}")
+    axes[0].set_xlabel('Number of Collisions per Spectrum')
+    axes[0].set_ylabel('Frequency')
+    axes[0].set_title('Collisions per Spectrum (Bin = 1.0 Da)')
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+
+    # Right: 0.01 Da bin collisions
+    axes[1].hist(collision_df['collisions_0.01Da'], bins=30, alpha=0.7, color='steelblue', edgecolor='black')
+    axes[1].axvline(collision_df['collisions_0.01Da'].mean(), color='darkblue', linestyle='--', 
+                    linewidth=2, label=f"Mean: {collision_df['collisions_0.01Da'].mean():.1f}")
+    axes[1].set_xlabel('Number of Collisions per Spectrum')
+    axes[1].set_ylabel('Frequency')
+    axes[1].set_title('Collisions per Spectrum (Bin = 0.01 Da)')
+    axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+
+
+
+
+
+
+
+
+
+# @title Proving Similarity preservation empirically 
+def prove_similarity_preservation_plots_and_statistics(mzml_path):
+    # Demonstrate similarity preservation between original sparse maps and hashed vectors
+    # Let's get multiple spectra and compare their similarities
+
+    # Get all spectra first
+    spectra_to_compare = get_all_MS2_objects(mzml_path)
+
+    # Convert each spectrum to sparse map and hash vector representations
+    sparse_maps = []
+    hash_vectors = []
+
+    WIDTH_OF_BIN = 0.01
+    hash_buckets = 800
+
+    def normalize_intensity():
+        """Normalize intensities across all spectra to range [0,1]"""
+        # Collect all intensities from all spectra
+        all_intensities = []
+        for ms2 in spectra_to_compare:
+            all_intensities.extend(ms2.intensity)
+        
+        max_int = max(all_intensities)
+        min_int = min(all_intensities)
+        
+        def normalize_formula(intensity_array):
+            res = []
+            for intensity in intensity_array:
+                int = (intensity - min_int) / (max_int - min_int)
+                res.append(int)
+            return res
+        # Create normalized spectra tuples (mz, normalized_intensity)
+        normalized_spectra = []
+        for ms2 in spectra_to_compare:
+            normalized_intensities = normalize_formula(ms2.intensity)
+            # Create tuple of (mz_array, normalized_intensity_array)
+            normalized_spectrum = (ms2.mz, normalized_intensities)
+            normalized_spectra.append(normalized_spectrum)
+        
+        return normalized_spectra
+
+    # Get normalized data
+    normalized_spectra_tuples = normalize_intensity()
+
+    # Mutate spectra_to_compare to use normalized data
+    spectra_to_compare = [
+        type('NormalizedSpectrum', (), {
+            'mz': mz_array, 
+            'intensity': intensity_array
+        })() 
+        for mz_array, intensity_array in normalized_spectra_tuples
+    ]
+
+
+    def create_sparse_map(mz_array, intensity_array): # same as our code above.
+        """Convert spectrum to sparse map representation"""
+        sparse_map = {}
+        for mz, intensity in zip(mz_array, intensity_array):
+            idx = int(mz // WIDTH_OF_BIN)
+            sparse_map[idx] = intensity
+        return sparse_map
+
+    def sparse_map_to_hash_vector(sparse_map, num_buckets=hash_buckets):
+        """Convert sparse map to hash vector"""
+        hash_vec = [0] * num_buckets
+        for sparse_idx, intensity in sparse_map.items():
+            byte_representation = int(sparse_idx).to_bytes(8, 'little')
+            bucket_idx = rapidhash(byte_representation) % num_buckets
+            hash_vec[bucket_idx] += intensity
+        return hash_vec
+    def cosine_similarity(vec1, vec2):
+        """Calculate cosine similarity between two vectors (returns value between 0 and 1)"""
+        vec1 = np.array(vec1)
+        vec2 = np.array(vec2)
+        
+        # Calculate dot product
+        dot_prod = np.dot(vec1, vec2)
+        
+        # Calculate magnitudes
+        norm1 = np.linalg.norm(vec1) # here's the "cosine" part of cosine_similarity
+        norm2 = np.linalg.norm(vec2)
+        
+        # Avoid division by zero
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+        
+        # Cosine similarity = dot_product / (norm1 * norm2)
+        return dot_prod / (norm1 * norm2)
+    def sparse_cosine_similarity(map1, map2):
+        """Calculate cosine similarity between two sparse maps (returns value between 0 and 1)"""
+        # Get all unique indices from both maps
+        all_indices = set(map1.keys()) | set(map2.keys())
+        
+        # Convert sparse maps to dense vectors for the shared indices
+
+        vec1 = np.array([map1.get(idx, 0.0) for idx in sorted(all_indices)])
+        vec2 = np.array([map2.get(idx, 0.0) for idx in sorted(all_indices)])
+        # Calculate cosine similarity using the dot_product function
+        return cosine_similarity(vec1, vec2)
+
+    # Create representations for each spectrum
+    for spec_data in spectra_to_compare:
+        sparse_map = create_sparse_map(spec_data.mz, spec_data.intensity)
+        hash_vec = sparse_map_to_hash_vector(sparse_map,hash_buckets)
+        
+        sparse_maps.append(sparse_map)
+        hash_vectors.append(hash_vec)
+
+    # Calculate similarity matrices
+
+    n_spectra = len(spectra_to_compare)
+    sparse_similarities = np.zeros((n_spectra, n_spectra)) # tuples
+    hash_similarities = np.zeros((n_spectra, n_spectra))
+
+    # Calculate pairwise similarities using cosine similarity
+    for i in range(n_spectra):
+        for j in range(n_spectra):
+            # Sparse map cosine similarities (0 to 1)
+            sparse_similarities[i, j] = sparse_cosine_similarity(sparse_maps[i], sparse_maps[j])
+            
+            # Hash vector cosine similarities (0 to 1)  
+            hash_similarities[i, j] = cosine_similarity(hash_vectors[i], hash_vectors[j])
+
+
+    # When you compute pairwise similarities between spectra, you get a symmetric matrix
+    #      Spec0  Spec1  Spec2  Spec3
+    # Spec0  1.0   0.8    0.3    0.6
+    # Spec1  0.8   1.0    0.4    0.5
+    # Spec2  0.3   0.4    1.0    0.7
+    # Spec3  0.6   0.5    0.7    1.0
+    #
+    # Using np.triu allows us to just grab the upper (right) triangle. np.tril_indices would grab the lower left.
+    #
+    # Show distance between sparse and hash similarities using cosine distance
+    sparse_upper = sparse_similarities[np.triu_indices(n_spectra, k=1)]
+    hash_upper = hash_similarities[np.triu_indices(n_spectra, k=1)]
+
+
+    # Calculate cosine distance between the similarity matrices
+    cosine_similarity_preservation = 1- distance.cosine(sparse_upper, hash_upper)
+    correlation = np.corrcoef(sparse_upper, hash_upper)
+
+    print(f"\nSimilarity Preservation Analysis:")
+    print(f"Cosine similarity between sparse and hash similarities: {cosine_similarity_preservation:.3f}")
+    print(f"This shows how well the hash representation preserves the similarity structure")
+    print(f"A similarity close to 1 indicates good similarity preservation")
+    print("shape of correlation matrix:", correlation.shape, "shape of other arrays:", sparse_similarities.shape, hash_similarities.shape)
+
+    # Create multiple cleaner visualizations instead of one overwhelming scatter plot
+    fig, axes = plt.subplots(1, 1, figsize=(10, 6))
+    # Difference histogram - shows how well similarities are preserved
+    differences = hash_upper - sparse_upper
+    axes.hist(differences, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
+    axes.axvline(0, color='red', linestyle='--', linewidth=2, label='Perfect preservation')
+    axes.set_xlabel('Hash Similarity - Sparse Similarity')
+    axes.set_ylabel('Frequency')
+    axes.set_title(f'Similarity Preservation Errors\nMean: {np.mean(differences):.4f}, Std: {np.std(differences):.4f}')
+    axes.legend()
+    axes.set_xlim(-0.1, 1.0)
+    axes.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+
+    # Summary statistics
+    print(f"\nDetailed Statistics:")
+    print(f"Number of pairwise comparisons: {len(sparse_upper):,}")
+    print(f"Sparse similarities range: {np.min(sparse_upper):.3f} to {np.max(sparse_upper):.3f}")
+    print(f"Hash similarities range: {np.min(hash_upper):.3f} to {np.max(hash_upper):.3f}")
+    print(f"Mean absolute difference: {np.mean(np.abs(differences)):.4f}")
+    print(f"Pearson correlation coefficient: {correlation[0,1]:.4f}")
+
+    # Convert sparse similarities to DataFrame for better display
+    sparse_df = pd.DataFrame(sparse_similarities)
+    sparse_df.index.name = 'Spectrum'
+    sparse_df.columns.name = 'Spectrum'
+
+    # Convert hash similarities to DataFrame for better display  
+    hash_df = pd.DataFrame(hash_similarities)
+    hash_df.index.name = 'Spectrum'
+    hash_df.columns.name = 'Spectrum'
+
+    import seaborn as sns
+
+    # Perform hierarchical clustering on the sparse (unhashed) similarities
+    # Convert similarity to distance (1 - similarity) for clustering
+    sparse_distances = 1 - sparse_similarities
+
+    # Create clustermaps with the same ordering
+    print("Clustering based on unhashed similarities, showing both matrices with same ordering:")
+
+    # First clustermap: sparse similarities (this determines the ordering)
+    fig1 = sns.clustermap(1-sparse_df, method="average", cmap="viridis", 
+                        figsize=(10, 8), cbar_pos=(0.02, 0.8, 0.03, 0.18))
+    fig1.figure.suptitle('Unhashed (Sparse) Matrix Similarities\n(Hierarchical Clustering)', y=0.95)
+
+    # grab ordering from fig 1
+    row_order = fig1.dendrogram_row.reordered_ind
+    col_order = fig1.dendrogram_col.reordered_ind
+
+    plt.show()
+
+    # Reorder the hash_df according to the clustering results from fig 1
+    hash_df_reordered = hash_df.iloc[row_order, col_order]
+
+    fig2 = sns.clustermap(1-hash_df_reordered, method="average", cmap="viridis",
+                        row_cluster=False, col_cluster=False,  # Don't re-cluster, use existing order
+                        figsize=(10, 8), cbar_pos=(0.02, 0.8, 0.03, 0.18))
+    fig2.figure.suptitle('Hashed Matrix Similarities\n(Same ordering as unhashed clustering)', y=0.95)
+
+    plt.show()
