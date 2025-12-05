@@ -120,98 +120,150 @@ class AugmentedManim(Scene):
         self.wait(1)
         
         # ===== ORIGINAL SCENE CONTINUES =====
-        # Create axes for quadrant 1 only
-        axes = Axes(
-            x_range=[0, 12, 1],
-            y_range=[0, 12, 1],
-            axis_config={"include_tip": True},
+        # Create x-axis only (no y-axis) - moved way down
+        x_axis = Line(
+            start=LEFT * 5.5,
+            end=RIGHT * 5.5,
+            color=WHITE,
+            stroke_width=2
         )
+        x_axis.shift(DOWN * 2.5)
+        
+        # Add arrow tip to x-axis
+        x_arrow_tip = Triangle(color=WHITE, fill_opacity=1).scale(0.1)
+        x_arrow_tip.rotate(-PI/2)
+        x_arrow_tip.next_to(x_axis, RIGHT, buff=0)
         
         # Add x-axis label
-        x_label = Text("Small Window in Mass Spectrum (simplified)", font_size=20).next_to(axes.x_axis, DOWN, buff=0.2)
+        x_label = Text("Time", font_size=24).next_to(x_axis, DOWN, buff=0.3)
         
-        # Display the axes, label, and title
-        self.play(Create(axes), Write(x_label))
+        # Display the axis and label
+        self.play(Create(x_axis), Create(x_arrow_tip), Write(x_label))
         self.wait(1.5)
         
-        # MS1 scan - 3 bars equally spaced (blue)
-        ms1_positions = [2, 6, 10]  # x positions
-        ms1_heights = [6, 8, 5]  # y heights
-        ms1_bars = VGroup()
+        # Define MS2 groups - each group belongs to an MS1 scan
+        # Group 1: MS2 scans 1-3 belong to MS1 scan 1
+        # Group 2: MS2 scans 4-6 belong to MS1 scan 2  
+        # Group 3: MS2 scan 7-9 belongs to MS1 scan 3
         
-        for x_pos, height in zip(ms1_positions, ms1_heights):
-            bar = Line(
-                start=axes.c2p(x_pos, 0),
-                end=axes.c2p(x_pos, height),
-                color=BLUE,
-                stroke_width=6
-            )
-            ms1_bars.add(bar)
+        # Bar dimensions
+        bar_width = 0.6
+        bar_height = 1.5  # Shorter bars to leave room for arrows
+        bar_spacing = 0.15  # Spacing within group
+        group_spacing = 0.8  # Larger spacing between MS1 groups
         
-        # MS2 scan - 4 bars between MS1 bars (red)
-        ms2_positions = [3, 4,5, 7, 8, 9, 11]  # x positions between MS1 bars
-        ms2_heights = [3, 5, 4, 6, 4,3,7]  # y heights
+        # Calculate positions for the 3 groups of 3 bars each
+        # Start position for first bar
+        start_x = -4.5
+        
         ms2_bars = VGroup()
+        ms2_positions = []  # Store center x positions for arrows
+        ms2_to_ms1_idx = []  # Store which MS1 each MS2 belongs to
         
-        for x_pos, height in zip(ms2_positions, ms2_heights):
-            bar = Line(
-                start=axes.c2p(x_pos, 0),
-                end=axes.c2p(x_pos, height),
-                color=RED,
-                stroke_width=6
+        current_x = start_x
+        for group_idx in range(3):  # 3 MS1 groups
+            for bar_idx in range(3):  # 3 MS2 bars per group
+                bar = Rectangle(
+                    width=bar_width,
+                    height=bar_height,
+                    color=RED,
+                    fill_color=RED,
+                    fill_opacity=0.8,
+                    stroke_width=2
+                )
+                # Position bar so bottom sits on x-axis
+                bar.move_to([current_x, x_axis.get_center()[1] + bar_height/2, 0])
+                ms2_bars.add(bar)
+                ms2_positions.append(current_x)
+                ms2_to_ms1_idx.append(group_idx)
+                
+                current_x += bar_width + bar_spacing
+            
+            # Add extra spacing between groups (minus the bar_spacing we already added)
+            current_x += group_spacing - bar_spacing
+        
+        # Create MS1 labels and braces at the top - with more space above bars for arrows
+        ms1_labels = ["MS1₁", "MS1₂", "MS1₃"]
+        
+        ms1_braces = VGroup()
+        ms1_texts = VGroup()
+        brace_y_position = x_axis.get_center()[1] + bar_height + 1.5  # More space above bars for arrows
+        
+        # Calculate brace positions based on actual bar positions
+        group_starts = [0, 3, 6]  # Starting indices for each group
+        for i, (label, start_idx) in enumerate(zip(ms1_labels, group_starts)):
+            # Get the leftmost and rightmost bar positions in this group
+            left_x = ms2_positions[start_idx] - bar_width/2
+            right_x = ms2_positions[start_idx + 2] + bar_width/2
+            
+            # Create horizontal brace facing down (tip points down toward bars)
+            brace = Brace(
+                Line(
+                    start=[left_x, brace_y_position, 0],
+                    end=[right_x, brace_y_position, 0]
+                ),
+                direction=UP,  # Changed to UP so brace tip points DOWN
+                color=BLUE
             )
-            ms2_bars.add(bar)
+            brace.shift(DOWN * 0.15)  # Shift bracket down
+            
+            # MS1 label above the brace
+            ms1_text = Text(label, color=BLUE, font_size=22).next_to(brace, UP, buff=0.1)
+            
+            ms1_braces.add(brace)
+            ms1_texts.add(ms1_text)
         
-        # Animate MS1 bars
-        self.play(Create(ms1_bars))
-        self.wait(1.5)
+        # Store heights for arrow calculations (all same now)
+        ms2_heights = [bar_height] * 9
         
-        # Animate MS2 bars
+        # Animate MS2 bars first
         self.play(Create(ms2_bars))
         self.wait(1.5)
         
-        # Create legend in top right
-        legend_ms1_line = Line(ORIGIN, RIGHT * 0.5, color=BLUE, stroke_width=6)
-        legend_ms1_text = Text("MS1", font_size=24).next_to(legend_ms1_line, RIGHT, buff=0.2)
-        legend_ms1 = VGroup(legend_ms1_line, legend_ms1_text)
+        # Animate MS1 braces and labels
+        self.play(Create(ms1_braces), Write(ms1_texts))
+        self.wait(1.5)
         
-        legend_ms2_line = Line(ORIGIN, RIGHT * 0.5, color=RED, stroke_width=6)
-        legend_ms2_text = Text("MS2", font_size=24).next_to(legend_ms2_line, RIGHT, buff=0.2)
-        legend_ms2 = VGroup(legend_ms2_line, legend_ms2_text)
+        # Create legend in top right
+        legend_ms1_rect = Rectangle(width=0.5, height=0.3, color=BLUE, fill_color=BLUE, fill_opacity=0.8)
+        legend_ms1_text = Text("MS1", font_size=24).next_to(legend_ms1_rect, RIGHT, buff=0.2)
+        legend_ms1 = VGroup(legend_ms1_rect, legend_ms1_text)
+        
+        legend_ms2_rect = Rectangle(width=0.5, height=0.3, color=RED, fill_color=RED, fill_opacity=0.8)
+        legend_ms2_text = Text("MS2", font_size=24).next_to(legend_ms2_rect, RIGHT, buff=0.2).shift(DOWN * 0.15)
+        legend_ms2 = VGroup(legend_ms2_rect, legend_ms2_text)
         
         legend = VGroup(legend_ms1, legend_ms2).arrange(DOWN, aligned_edge=LEFT, buff=0.3)
         legend.to_corner(UR, buff=0.5)
         
         self.play(FadeIn(legend))
         self.wait(1.5)
-                # Add title at the top
-        title = Text("Which MS1 does each MS2 scan correspond to?", color=PURPLE,font_size=28).to_edge(UP, buff=0.3)
-
-
-        # Create purple arrows from MS2 bars to corresponding MS1 bars
-        # MS2 bars at positions [3, 4, 5, 7, 8, 9, 11] correspond to MS1 bars at [2, 6, 10]
-        # Bars at 3, 4, 5 -> MS1 at 2
-        # Bars at 7, 8, 9 -> MS1 at 6
-        # Bar at 11 -> MS1 at 10
-        ms2_to_ms1_mapping = [
-            (3, 2), (4, 2), (5, 2),  # First three MS2 bars -> first MS1 bar
-            (7, 6), (8, 6), (9, 6),  # Next three MS2 bars -> second MS1 bar
-            (11, 10)                  # Last MS2 bar -> third MS1 bar
-        ]
         
+        # Add title at the top
+        title = Text("Which MS1 does each MS2 scan correspond to?", color=PURPLE, font_size=28).to_edge(UP, buff=0.3)
+        
+        # Create mapping from MS2 bar index to MS1 index for arrows
+        ms2_to_ms1_mapping = []
+        for bar_idx, ms1_idx in enumerate(ms2_to_ms1_idx):
+            ms2_to_ms1_mapping.append((bar_idx, ms1_idx))
+        
+        # Create purple arrows pointing upward from MS2 bars to their parent MS1 braces
         arrows = VGroup()
-        for ms2_pos, ms1_pos in ms2_to_ms1_mapping:
-            ms2_idx = ms2_positions.index(ms2_pos)
-            ms1_idx = ms1_positions.index(ms1_pos)
+        for ms2_bar_idx, ms1_idx in ms2_to_ms1_mapping:
+            # Arrow from top of MS2 bar upward to the bottom of the corresponding MS1 brace
+            brace_bottom = ms1_braces[ms1_idx].get_bottom()
+            ms2_bar_top = ms2_bars[ms2_bar_idx].get_top()
             
-            # Arrow from top of MS2 bar to top of MS1 bar
-            arrow = CurvedArrow(
-                start_point=axes.c2p(ms2_pos, ms2_heights[ms2_idx]),
-                end_point=axes.c2p(ms1_pos, ms1_heights[ms1_idx]),
+            arrow = Arrow(
+                start=ms2_bar_top + UP * 0.1,
+                end=[ms2_bar_top[0], brace_bottom[1] - 0.1, 0],
                 color=PURPLE,
-                stroke_width=3
+                stroke_width=3,
+                buff=0.05,
+                max_tip_length_to_length_ratio=0.15
             )
             arrows.add(arrow)
+        
         self.play(Write(title))
         self.wait(1)
         self.play(Create(arrows), run_time=3.5)
@@ -227,14 +279,14 @@ class AugmentedManim(Scene):
         self.play(ReplacementTransform(aug_spectra_title, step_1))
         self.wait(1.5)
         
-        # Highlight the middle MS2 bar (position index 3, which is position 7)
+        # Highlight the middle MS2 bar (position index 4, which is in the middle)
         ms2_idx_to_highlight = len(ms2_positions) // 2
         
         # Create a highlight around the selected MS2 bar
         highlight_rect = SurroundingRectangle(
             ms2_bars[ms2_idx_to_highlight],
             color=GOLD,
-            buff=0.1
+            buff=0.0
         )
         
         self.play(Create(highlight_rect))
@@ -252,20 +304,21 @@ class AugmentedManim(Scene):
         selected_ms2_indices = list(range(max(0, center_idx - width), min(len(ms2_positions), center_idx + width + 1)))
         
         # Create a horizontal line on the x-axis showing the range of inclusion
-        leftmost_pos = ms2_positions[selected_ms2_indices[0]]
-        rightmost_pos = ms2_positions[selected_ms2_indices[-1]]
+        leftmost_bar = ms2_bars[selected_ms2_indices[0]]
+        rightmost_bar = ms2_bars[selected_ms2_indices[-1]]
+        x_axis_y = x_axis.get_center()[1]
         
         range_line = Line(
-            start=axes.c2p(leftmost_pos, 0),
-            end=axes.c2p(rightmost_pos, 0),
+            start=[leftmost_bar.get_center()[0], x_axis_y, 0],
+            end=[rightmost_bar.get_center()[0], x_axis_y, 0],
             color=PURPLE,
             stroke_width=12
         )
         
         # Add arrow tips at both ends to show the range
         left_arrow = Arrow(
-            start=axes.c2p(leftmost_pos, -0.8),
-            end=axes.c2p(leftmost_pos, 0),
+            start=[leftmost_bar.get_center()[0], x_axis_y - 0.5, 0],
+            end=[leftmost_bar.get_center()[0], x_axis_y, 0],
             color=PURPLE,
             buff=0,
             stroke_width=6,
@@ -273,8 +326,8 @@ class AugmentedManim(Scene):
         )
         
         right_arrow = Arrow(
-            start=axes.c2p(rightmost_pos, -0.8),
-            end=axes.c2p(rightmost_pos, 0),
+            start=[rightmost_bar.get_center()[0], x_axis_y - 0.5, 0],
+            end=[rightmost_bar.get_center()[0], x_axis_y, 0],
             color=PURPLE,
             buff=0,
             stroke_width=6,
@@ -293,7 +346,7 @@ class AugmentedManim(Scene):
                 rect = SurroundingRectangle(
                     ms2_bars[idx],
                     color=GOLD,
-                    buff=0.2
+                    buff=0.1
                 )
                 neighbor_rects.add(rect)
         
@@ -306,28 +359,25 @@ class AugmentedManim(Scene):
         self.play(ReplacementTransform(step_2, step_3))
         self.wait(1.5)
         
-        # For each selected MS2 spectra, highlight the corresponding MS1 spectra
+        # For each selected MS2 spectra, highlight the corresponding MS1 braces
         highlighted_ms1_indices = set()
         for idx in selected_ms2_indices:
-            ms2_pos = ms2_positions[idx]
-            # Find corresponding MS1 based on the mapping
-            for ms2_map_pos, ms1_map_pos in ms2_to_ms1_mapping:
-                if ms2_map_pos == ms2_pos:
-                    ms1_idx = ms1_positions.index(ms1_map_pos)
-                    highlighted_ms1_indices.add(ms1_idx)
-                    break
+            # The ms2_to_ms1_idx list maps each MS2 bar index to its MS1 index
+            highlighted_ms1_indices.add(ms2_to_ms1_idx[idx])
         
-        # Create highlights around the corresponding MS1 bars
-        ms1_rects = VGroup()
+        # Create highlights around the corresponding MS1 braces and labels
+        ms1_highlights = VGroup()
         for ms1_idx in highlighted_ms1_indices:
+            # Highlight the brace and label together
+            brace_and_label = VGroup(ms1_braces[ms1_idx], ms1_texts[ms1_idx])
             rect = SurroundingRectangle(
-                ms1_bars[ms1_idx],
+                brace_and_label,
                 color=GOLD,
-                buff=0.3
+                buff=0.15
             )
-            ms1_rects.add(rect)
+            ms1_highlights.add(rect)
         
-        self.play(Create(ms1_rects))
+        self.play(Create(ms1_highlights))
         self.wait(3)
         
         
