@@ -605,3 +605,31 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path):
     fig2.figure.suptitle('Hashed Matrix Similarities\n(Same ordering as unhashed clustering)', y=0.95)
 
     plt.show()
+
+def plot_theoretical_ions(b_mz, y_mz, peptide):
+    # Peak height scaling (b1/y1 highest, b20/y20 lowest)
+    max_height = 0.9
+    min_height = 0.1
+    b_heights = np.linspace(max_height, min_height, len(b_mz))
+    y_heights = np.linspace(max_height, min_height, len(y_mz))
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 4), dpi=100)
+    ax.vlines(b_mz, 0, b_heights, colors='#1976D2', linewidth=1.5, label='b-ions')
+    ax.vlines(y_mz, 0, y_heights, colors='#D32F2F', linewidth=1.5, label='y-ions')
+
+    ax.set_ylim(0, 1.1)
+    ax.set_xlabel("m/z")
+    ax.set_ylabel("Intensity (scaled)")
+    ax.set_title(f"Theoretical ions for {peptide}")
+    ax.legend(loc='upper center') 
+    ax.grid(True, axis='y', alpha=0.25)
+
+    # Labels
+    for i, (x, h) in enumerate(zip(b_mz, b_heights), start=1):
+        ax.text(x, h + 0.02, f"b{i}", rotation=90, ha="center", va="bottom", fontsize=8)
+    for i, (x, h) in enumerate(zip(y_mz, y_heights), start=1):
+        j = len(y_mz) - i + 1 #count right to left
+        ax.text(x, h + 0.02, f"y{j}", rotation=90, ha="center", va="bottom", fontsize=8)
+        
+    plt.show()
