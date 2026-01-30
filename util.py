@@ -399,7 +399,7 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
 
 
 # @title Proving Similarity preservation empirically 
-def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=300):
+def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=3000):
       # Demonstrate similarity preservation between original sparse maps and hashed vectors
       # Let's get multiple spectra and compare their similarities
 
@@ -620,6 +620,12 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     # # # plt.show()
 
     # hashed vectors (already built above)
+
+    
+    
+    
+    
+        
     Xh = np.array(hash_vectors)
 
     # build dense unhashed matrix from sparse_maps (compress if too large)
@@ -752,6 +758,162 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
 
     plt.tight_layout()
     plt.show()
+    
+        
+    # ============= RIGOROUS SIMILARITY PRESERVATION PROOF =============
+
+    # 1. Compute pairwise cosine similarities for both representations
+    print("Computing pairwise similarities...")
+    n_spectra = len(sparse_maps)
+    sparse_similarities = np.zeros((n_spectra, n_spectra))
+    hash_similarities = np.zeros((n_spectra, n_spectra))
+
+    for i in range(n_spectra):
+        print(f"  Processing spectrum {i+1}/{n_spectra}", end='\r')
+        for j in range(i, n_spectra):  # Only compute upper triangle
+            sparse_sim = sparse_cosine_similarity(sparse_maps[i], sparse_maps[j])
+            hash_sim = cosine_similarity(hash_vectors[i], hash_vectors[j])
+            
+            sparse_similarities[i, j] = sparse_sim
+            sparse_similarities[j, i] = sparse_sim  # Symmetric
+            hash_similarities[i, j] = hash_sim
+            hash_similarities[j, i] = hash_sim
+
+    # 2. Extract upper triangle (excluding diagonal) for correlation analysis
+    upper_indices = np.triu_indices(n_spectra, k=1)
+    sparse_upper = sparse_similarities[upper_indices]
+    hash_upper = hash_similarities[upper_indices]
+
+    # 3. Calculate correlation metrics (Mantel-test style)
+    from scipy.stats import pearsonr, spearmanr
+    pearson_corr, pearson_pval = pearsonr(sparse_upper, hash_upper)
+    spearman_corr, spearman_pval = spearmanr(sparse_upper, hash_upper)
+
+    print(f"\n{'='*60}")
+    print(f"SIMILARITY PRESERVATION METRICS")
+    print(f"{'='*60}")
+    print(f"Pearson correlation:  {pearson_corr:.4f} (p-value: {pearson_pval:.2e})")
+    print(f"Spearman correlation: {spearman_corr:.4f} (p-value: {spearman_pval:.2e})")
+    print(f"Number of pairwise comparisons: {len(sparse_upper):,}")
+    print(f"Mean absolute error: {np.mean(np.abs(sparse_upper - hash_upper)):.4f}")
+    print(f"{'='*60}\n")
+
+    # 4. Cluster ONLY the unhashed data
+    perp = min(30, max(5, (n_spectra // 3)))
+    tsne_s = TSNE(n_components=2, perplexity=perp, random_state=0, init='pca')
+    Xs2 = tsne_s.fit_transform(Xs_pca)
+
+    N_CLUSTERS = 12
+    km_s = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(Xs2)
+    labels_shared = km_s.labels_  # These labels will be used for BOTH plots
+    centers_s = km_s.cluster_centers_
+
+    # 5. Apply t-SNE to hashed data (for visualization only)
+    tsne_h = TSNE(n_components=2, perplexity=perp, random_state=0, init='pca')
+    Xh2 = tsne_h.fit_transform(Xh_pca)
+
+    # Calculate "virtual" centers for hashed plot based on shared labels
+    centers_h = np.array([Xh2[labels_shared == k].mean(axis=0) 
+                        for k in range(N_CLUSTERS)])
+
+    # 6. Detect outliers using unhashed clustering
+    dists_s = np.linalg.norm(Xs2 - centers_s[labels_shared], axis=1)
+    dists_h = np.linalg.norm(Xh2 - centers_h[labels_shared], axis=1)
+    thr_s = np.percentile(dists_s, 90)
+    thr_h = np.percentile(dists_h, 90)
+    out_s = dists_s > thr_s
+    out_h = dists_h > thr_h
+
+    # 7. Create visualizations
+    fig = plt.figure(figsize=(16, 10))
+    gs = fig.add_gridspec(2, 2, height_ratios=[1, 1], width_ratios=[1, 1])
+
+    # Top row: Scatter plot comparing similarities
+    ax_scatter = fig.add_subplot(gs[0, :])
+    ax_scatter.scatter(sparse_upper, hash_upper, alpha=0.3, s=10, edgecolors='none')
+    ax_scatter.plot([0, 1], [0, 1], 'r--', linewidth=2, label='Perfect preservation')
+    ax_scatter.set_xlabel('Unhashed (Sparse) Cosine Similarity', fontsize=12)
+    ax_scatter.set_ylabel('Hashed Cosine Similarity', fontsize=12)
+    ax_scatter.set_title(f'Pairwise Similarity Preservation\n' + 
+                        f'Pearson r={pearson_corr:.4f}, Spearman ρ={spearman_corr:.4f}',
+                        fontsize=14, fontweight='bold')
+    ax_scatter.legend()
+    ax_scatter.grid(alpha=0.3)
+    ax_scatter.set_xlim(0, 1)
+    ax_scatter.set_ylim(0, 1)
+    ax_scatter.set_aspect('equal')
+
+    # Bottom row: t-SNE plots with SAME colors
+    ax_unhashed = fig.add_subplot(gs[1, 0])
+    ax_hashed = fig.add_subplot(gs[1, 1])
+
+    def plot_with_shared_colors(ax, X2, centers, labels, out_mask, title):
+        """Plot with colors based on unhashed clustering"""
+        # Voronoi background
+        pad = 0.08
+        x_min, x_max = X2[:,0].min(), X2[:,0].max()
+        y_min, y_max = X2[:,1].min(), X2[:,1].max()
+        dx = x_max - x_min
+        dy = y_max - y_min
+        x_min -= dx*pad; x_max += dx*pad
+        y_min -= dy*pad; y_max += dy*pad
+        gx = gy = 200
+        xx = np.linspace(x_min, x_max, gx)
+        yy = np.linspace(y_min, y_max, gy)
+        xxg, yyg = np.meshgrid(xx, yy)
+        grid = np.stack([xxg.ravel(), yyg.ravel()], axis=1)
+        d = np.linalg.norm(grid[:, None, :] - centers[None, :, :], axis=2)
+        nearest = np.argmin(d, axis=1).reshape(gy, gx)
+        cmap = plt.get_cmap('tab20')
+        ax.pcolormesh(xxg, yyg, nearest, cmap=cmap, shading='auto', alpha=0.18)
+        
+        # Plot points with shared colors
+        ax.scatter(X2[~out_mask,0], X2[~out_mask,1], c=labels[~out_mask], 
+                cmap='tab20', s=28, edgecolor='k', linewidth=0.2)
+        if out_mask.any():
+            ax.scatter(X2[out_mask,0], X2[out_mask,1], c='lightgray', 
+                    s=18, alpha=0.8, label='outliers')
+        ax.scatter(centers[:,0], centers[:,1], c='k', marker='x', s=60)
+        ax.set_title(title, fontsize=12)
+        ax.set_xlabel('Dim1')
+        ax.set_ylabel('Dim2')
+        ax.grid(alpha=0.25)
+
+    plot_with_shared_colors(ax_unhashed, Xs2, centers_s, labels_shared, out_s,
+                            f'Unhashed (Sparse) - {N_CLUSTERS} clusters')
+    plot_with_shared_colors(ax_hashed, Xh2, centers_h, labels_shared, out_h,
+                            f'Hashed - Same {N_CLUSTERS} clusters')
+
+    plt.tight_layout()
+    plt.show()
+
+    # 8. Additional validation: Heatmap comparison
+    fig2, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+    # Sort by hierarchical clustering for better visualization
+    from scipy.cluster.hierarchy import linkage, leaves_list
+    linkage_matrix = linkage(1 - sparse_similarities, method='average')
+    order = leaves_list(linkage_matrix)
+
+    im1 = axes[0].imshow(sparse_similarities[np.ix_(order, order)], 
+                        cmap='viridis', vmin=0, vmax=1)
+    axes[0].set_title('Unhashed Similarity Matrix\n(Hierarchically Ordered)')
+    plt.colorbar(im1, ax=axes[0])
+
+    im2 = axes[1].imshow(hash_similarities[np.ix_(order, order)], 
+                        cmap='viridis', vmin=0, vmax=1)
+    axes[1].set_title('Hashed Similarity Matrix\n(Same Order)')
+    plt.colorbar(im2, ax=axes[1])
+
+    # Difference map
+    diff = np.abs(sparse_similarities - hash_similarities)[np.ix_(order, order)]
+    im3 = axes[2].imshow(diff, cmap='Reds', vmin=0, vmax=0.3)
+    axes[2].set_title(f'Absolute Difference\n(Mean: {np.mean(np.abs(sparse_similarities - hash_similarities)):.4f})')
+    plt.colorbar(im3, ax=axes[2])
+
+    plt.tight_layout()
+    plt.show()
+
 
 def plot_theoretical_ions(b_mz, y_mz, peptide):
     # Peak height scaling (b1/y1 highest, b20/y20 lowest)
