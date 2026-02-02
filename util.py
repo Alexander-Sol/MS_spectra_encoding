@@ -399,7 +399,8 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
 
 
 # @title Proving Similarity preservation empirically 
-def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=3000):
+def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=300):
+    import mmh3
       # Demonstrate similarity preservation between original sparse maps and hashed vectors
       # Let's get multiple spectra and compare their similarities
 
@@ -467,8 +468,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
         """Convert sparse map to hash vector"""
         hash_vec = [0] * num_buckets
         for sparse_idx, intensity in sparse_map.items():
-            byte_representation = int(sparse_idx).to_bytes(8, 'little')
-            bucket_idx = rapidhash(byte_representation) % num_buckets
+            bucket_idx = mmh3.hash(str(sparse_idx), seed=42) % num_buckets
             hash_vec[bucket_idx] += intensity
         return hash_vec
     def cosine_similarity(vec1, vec2):
@@ -798,21 +798,33 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     print(f"Mean absolute error: {np.mean(np.abs(sparse_upper - hash_upper)):.4f}")
     print(f"{'='*60}\n")
 
-    # 4. Cluster ONLY the unhashed data
-    perp = min(30, max(5, (n_spectra // 3)))
-    tsne_s = TSNE(n_components=2, perplexity=perp, random_state=0, init='pca')
-    Xs2 = tsne_s.fit_transform(Xs_pca)
-
+    # 4. Cluster on ORIGINAL PCA features (not t-SNE coordinates!)
+    # This ensures clusters reflect true similarity structure preserved by hashing
     N_CLUSTERS = 12
-    km_s = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(Xs2)
+    km_s = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(Xs_pca)
     labels_shared = km_s.labels_  # These labels will be used for BOTH plots
-    centers_s = km_s.cluster_centers_
 
-    # 5. Apply t-SNE to hashed data (for visualization only)
-    tsne_h = TSNE(n_components=2, perplexity=perp, random_state=0, init='pca')
-    Xh2 = tsne_h.fit_transform(Xh_pca)
+    # 5. Apply t-SNE to CONCATENATED data so both embeddings share the same space
+    # This is key: t-SNE on combined data ensures consistent spatial relationships
+    perp = min(30, max(5, (n_spectra // 3)))
+    
+    # Ensure both PCA matrices have same number of columns for concatenation
+    min_cols = min(Xs_pca.shape[1], Xh_pca.shape[1])
+    Xs_pca_aligned = Xs_pca[:, :min_cols]
+    Xh_pca_aligned = Xh_pca[:, :min_cols]
+    
+    # Run t-SNE on combined data
+    combined_pca = np.vstack([Xs_pca_aligned, Xh_pca_aligned])
+    tsne_combined = TSNE(n_components=2, perplexity=perp, random_state=0, init='pca')
+    combined_2d = tsne_combined.fit_transform(combined_pca)
+    
+    # Split back into unhashed and hashed embeddings
+    Xs2 = combined_2d[:n_spectra]
+    Xh2 = combined_2d[n_spectra:]
 
-    # Calculate "virtual" centers for hashed plot based on shared labels
+    # Calculate centers for visualization based on where clustered points end up in t-SNE space
+    centers_s = np.array([Xs2[labels_shared == k].mean(axis=0) 
+                        for k in range(N_CLUSTERS)])
     centers_h = np.array([Xh2[labels_shared == k].mean(axis=0) 
                         for k in range(N_CLUSTERS)])
 
