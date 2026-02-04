@@ -323,7 +323,7 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
         all_spectra = all_spectra[:max_spectra]
     n_spectra = len(all_spectra)
     
-    bin_widths = (1.0, 0.01)
+    bin_widths = (1.0, 0.01, 500.0)
     
     # Pre-compute bin sets for all spectra at both bin widths
     bin_sets = {}
@@ -347,6 +347,7 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
     # Convert to arrays for statistics
     collisions_1da = np.array(pairwise_collisions[1.0])
     collisions_001da = np.array(pairwise_collisions[0.01])
+    collisions_500da = np.array(pairwise_collisions[500.0])
     
     n_pairs = len(collisions_1da)
     
@@ -368,11 +369,18 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
     print(f"  Max collision rate: {collisions_001da.max()*100:.2f}%")
     print(f"  Pairs with >50% collision: {(collisions_001da > 0.5).sum():,} ({(collisions_001da > 0.5).mean()*100:.1f}%)")
     
-    print(f"\n--- Improvement ---")
-    print(f"  Reduction in mean collision rate: {(1 - collisions_001da.mean()/collisions_1da.mean())*100:.1f}%")
+    print(f"\n--- Bin Size = 500.0 Da ---")
+    print(f"  Mean collision rate per pair: {collisions_500da.mean()*100:.2f}%")
+    print(f"  Median collision rate: {np.median(collisions_500da)*100:.2f}%")
+    print(f"  Max collision rate: {collisions_500da.max()*100:.2f}%")
+    print(f"  Pairs with >50% collision: {(collisions_500da > 0.5).sum():,} ({(collisions_500da > 0.5).mean()*100:.1f}%)")
     
-    # Visualization: Distribution of collision rates
-    fig, axes = subplots(1, 2, figsize=(14, 5))
+    print(f"\n--- Improvement ---")
+    print(f"  Reduction in mean collision rate (0.01 vs 1.0 Da): {(1 - collisions_001da.mean()/collisions_1da.mean())*100:.1f}%")
+    print(f"  Change in mean collision rate (500.0 vs 1.0 Da): {(1 - collisions_500da.mean()/collisions_1da.mean())*100:.1f}%")
+    
+    # Visualization: Distribution of collision rates (now including 500 Da)
+    fig, axes = subplots(1, 3, figsize=(21, 5))
     
     # Left: 1.0 Da bin collisions
     axes[0].hist(collisions_1da * 100, bins=30, alpha=0.7, color='coral', edgecolor='black')
@@ -384,7 +392,7 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
     
-    # Right: 0.01 Da bin collisions
+    # Middle: 0.01 Da bin collisions
     axes[1].hist(collisions_001da * 100, bins=30, alpha=0.7, color='steelblue', edgecolor='black')
     axes[1].axvline(collisions_001da.mean() * 100, color='darkblue', linestyle='--', 
                     linewidth=2, label=f"Mean: {collisions_001da.mean()*100:.1f}%")
@@ -393,6 +401,16 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
     axes[1].set_title('Pairwise Collisions (Bin = 0.01 Da)\nLower = Better Discrimination')
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
+
+    # Right: 500.0 Da bin collisions
+    axes[2].hist(collisions_500da * 100, bins=30, alpha=0.7, color='seagreen', edgecolor='black')
+    axes[2].axvline(collisions_500da.mean() * 100, color='darkgreen', linestyle='--', 
+                    linewidth=2, label=f"Mean: {collisions_500da.mean()*100:.1f}%")
+    axes[2].set_xlabel('Collision Rate Between Spectrum Pairs (%)')
+    axes[2].set_ylabel('Frequency')
+    axes[2].set_title('Pairwise Collisions (Bin = 500.0 Da)\nVery Large Bins => High False Similarity')
+    axes[2].legend()
+    axes[2].grid(True, alpha=0.3)
     
     plt.tight_layout()
     plt.show()
@@ -687,13 +705,15 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
         pcs_h = 1
     pca_reducer_h = PCA(n_components=pcs_h, random_state=0).fit(Xh_scaled)
     Xh_pca = pca_reducer_h.transform(Xh_scaled)
-
+    
+    from umap import UMAP
+    
     # t-SNE: set perplexity to a reasonable value relative to sample size
     perp = min(30, max(5, (n_spectra // 3)))
-    tsne_s = TSNE(n_components=2, perplexity=perp, random_state=0, init='pca')
-    tsne_h = TSNE(n_components=2, perplexity=perp, random_state=0, init='pca')
-    Xs2 = tsne_s.fit_transform(Xs_pca)
-    Xh2 = tsne_h.fit_transform(Xh_pca)
+    umap_s = UMAP(n_components=2, perplexity=perp, random_state=0, init='pca')
+    umap_h = UMAP(n_components=2, perplexity=perp, random_state=0, init='pca')
+    Xs2 = umap_s.fit_transform(Xs_pca)
+    Xh2 = umap_h.fit_transform(Xh_pca)
 
 
 
