@@ -839,10 +839,11 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     labels_shared = km_combined.labels_[:n_spectra]  # Use first half for both plots
 
     # Calculate centers for visualization based on actual cluster assignments in shared space
-    centers_s = np.array([Xs2[labels_shared == k].mean(axis=0) 
-                        for k in range(N_CLUSTERS)])
-    centers_h = np.array([Xh2[labels_shared == k].mean(axis=0) 
-                        for k in range(N_CLUSTERS)])
+    # Handle empty clusters by checking if they have points
+    centers_s = np.array([Xs2[labels_shared == k].mean(axis=0) if (labels_shared == k).any() 
+                        else np.zeros(Xs2.shape[1]) for k in range(N_CLUSTERS)])
+    centers_h = np.array([Xh2[labels_shared == k].mean(axis=0) if (labels_shared == k).any() 
+                        else np.zeros(Xh2.shape[1]) for k in range(N_CLUSTERS)])
 
     # 6. Detect outliers using shared clustering
     dists_s = np.linalg.norm(Xs2 - centers_s[labels_shared], axis=1)
