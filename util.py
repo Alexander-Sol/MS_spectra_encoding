@@ -7,6 +7,7 @@ from pyteomics import mzml, auxiliary
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import subplots
 from rapidhash import rapidhash
+import mmh3
 import numpy as np
 
 import numpy as np
@@ -418,6 +419,7 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
 
 # @title Proving Similarity preservation empirically 
 def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=300):
+    print("newer!")
     import mmh3
       # Demonstrate similarity preservation between original sparse maps and hashed vectors
       # Let's get multiple spectra and compare their similarities
@@ -433,7 +435,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     hash_vectors = []
 
     WIDTH_OF_BIN = 0.01
-    hash_buckets = 800
+    hash_buckets = 10000  # Increased from 800 to reduce collisions with ~100k dimensional space
 
     def normalize_intensity():
         """Normalize intensities across all spectra to range [0,1]"""
@@ -646,32 +648,26 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
         
     Xh = np.array(hash_vectors)
 
-    # build dense unhashed matrix from sparse_maps (compress if too large)
+    # Build full dense unhashed matrix from sparse_maps (no compression)
     all_indices = set()
     for sm in sparse_maps:
         all_indices |= set(sm.keys())
 
     max_idx = max(all_indices)
-    max_sparse_bins = 2000
-    if max_idx + 1 > max_sparse_bins:
-        factor = (max_idx + 1) // max_sparse_bins + 1
-        n_bins = (max_idx + 1) // factor + 1
-        def remap(sm_):
-            arr = np.zeros(n_bins, dtype=float)
-            for k, v in sm_.items():
-                new_k = k // factor
-                if new_k < n_bins:
-                    arr[new_k] += v
-            return arr
-    else:
-        n_bins = max_idx + 1
-        def remap(sm_):
-            arr = np.zeros(n_bins, dtype=float)
-            for k, v in sm_.items():
-                arr[k] = v
-            return arr
+    n_bins = max_idx + 1
+    
+    def remap(sm_):
+        arr = np.zeros(n_bins, dtype=float)
+        for k, v in sm_.items():
+            arr[k] = v
+        return arr
 
     Xs = np.vstack([remap(sm) for sm in sparse_maps])
+    
+    # L2 normalize each spectrum vector to unit length before scaling
+    from sklearn.preprocessing import normalize
+    Xs = normalize(Xs, norm='l2', axis=1)
+    Xh = normalize(Xh, norm='l2', axis=1)  # Also normalize hashed vectors
 
     # Scale to reduce outlier influence
     scaler_s = RobustScaler().fit(Xs)
@@ -710,10 +706,10 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     
     # t-SNE: set perplexity to a reasonable value relative to sample size
     perp = min(30, max(5, (n_spectra // 3)))
-    umap_s = UMAP(n_components=2, perplexity=perp, random_state=0, init='pca')
-    umap_h = UMAP(n_components=2, perplexity=perp, random_state=0, init='pca')
-    Xs2 = umap_s.fit_transform(Xs_pca)
-    Xh2 = umap_h.fit_transform(Xh_pca)
+    tsne_s = TSNE(n_components=2, perplexity=perp, random_state=0, init='pca')
+    tsne_h = TSNE(n_components=2, perplexity=perp, random_state=0, init='pca')
+    Xs2 = tsne_s.fit_transform(Xs_pca)
+    Xh2 = tsne_h.fit_transform(Xh_pca)
 
 
 
@@ -770,8 +766,8 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
         ax.set_ylabel('Dim2')
 
     fig, axes = plt.subplots(1, 2, figsize=(14,6))
-    plot_with_voronoi(axes[0], Xs2, centers_s, labels_s, out_s, f'Clusters (unhashed) - {N_CLUSTERS} clusters')
-    plot_with_voronoi(axes[1], Xh2, centers_h, labels_h, out_h, f'Clusters (hashed) - {N_CLUSTERS} clusters')
+    plot_with_voronoi(axes[0], Xs2, centers_s, labels_s, out_s, f'Clusters (full precision unhashed) - {N_CLUSTERS} clusters')
+    plot_with_voronoi(axes[1], Xh2, centers_h, labels_h, out_h, f'Clusters (hashed {hash_buckets} buckets) - {N_CLUSTERS} clusters')
 
     for ax in axes:
         ax.grid(alpha=0.25)
@@ -818,13 +814,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     print(f"Mean absolute error: {np.mean(np.abs(sparse_upper - hash_upper)):.4f}")
     print(f"{'='*60}\n")
 
-    # 4. Cluster on ORIGINAL PCA features (not t-SNE coordinates!)
-    # This ensures clusters reflect true similarity structure preserved by hashing
-    N_CLUSTERS = 12
-    km_s = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(Xs_pca)
-    labels_shared = km_s.labels_  # These labels will be used for BOTH plots
-
-    # 5. Apply t-SNE to CONCATENATED data so both embeddings share the same space
+    # 4. Apply t-SNE to CONCATENATED data so both embeddings share the same space
     # This is key: t-SNE on combined data ensures consistent spatial relationships
     perp = min(30, max(5, (n_spectra // 3)))
     
@@ -841,14 +831,20 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     # Split back into unhashed and hashed embeddings
     Xs2 = combined_2d[:n_spectra]
     Xh2 = combined_2d[n_spectra:]
+    
+    # 5. Cluster on the COMBINED 2D embedding (not just unhashed PCA)
+    # This ensures both representations use the same cluster structure in the shared space
+    N_CLUSTERS = 12
+    km_combined = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(combined_2d)
+    labels_shared = km_combined.labels_[:n_spectra]  # Use first half for both plots
 
-    # Calculate centers for visualization based on where clustered points end up in t-SNE space
+    # Calculate centers for visualization based on actual cluster assignments in shared space
     centers_s = np.array([Xs2[labels_shared == k].mean(axis=0) 
                         for k in range(N_CLUSTERS)])
     centers_h = np.array([Xh2[labels_shared == k].mean(axis=0) 
                         for k in range(N_CLUSTERS)])
 
-    # 6. Detect outliers using unhashed clustering
+    # 6. Detect outliers using shared clustering
     dists_s = np.linalg.norm(Xs2 - centers_s[labels_shared], axis=1)
     dists_h = np.linalg.norm(Xh2 - centers_h[labels_shared], axis=1)
     thr_s = np.percentile(dists_s, 90)
@@ -912,9 +908,9 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
         ax.grid(alpha=0.25)
 
     plot_with_shared_colors(ax_unhashed, Xs2, centers_s, labels_shared, out_s,
-                            f'Unhashed (Sparse) - {N_CLUSTERS} clusters')
+                            f'Unhashed (Full Precision) - {N_CLUSTERS} clusters')
     plot_with_shared_colors(ax_hashed, Xh2, centers_h, labels_shared, out_h,
-                            f'Hashed - Same {N_CLUSTERS} clusters')
+                            f'Hashed ({hash_buckets} buckets) - Same {N_CLUSTERS} clusters')
 
     plt.tight_layout()
     plt.show()
