@@ -432,8 +432,6 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     # Convert each spectrum to sparse map and hash vector representations
     sparse_maps = []
     hash_vectors = []
-
-    hash_buckets = 10000  # Increased from 800 to reduce collisions with ~100k dimensional space
     
     WIDTH_OF_BIN = 0.01
     hash_buckets = 10000  # Increased from 800 to reduce collisions with ~100k dimensional space
@@ -661,7 +659,6 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
 
     from scipy.stats import pearsonr, spearmanr
     pearson_corr, pearson_pval = pearsonr(sparse_upper, hash_upper)
-    spearman_corr, spearman_pval = spearmanr(sparse_upper, hash_upper)
 
     from IPython.display import display, Markdown
 
@@ -671,7 +668,6 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
 ### SIMILARITY PRESERVATION METRICS
 ---
 - **Pearson correlation**:  {pearson_corr:.4f} (p-value: {pearson_pval:.2e})
-- **Spearman correlation**: {spearman_corr:.4f} (p-value: {spearman_pval:.2e})
 - **Number of pairwise comparisons**: {len(sparse_upper):,}
 - **Mean absolute error**: {np.mean(np.abs(sparse_upper - hash_upper)):.4f}
 ---
@@ -684,7 +680,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     ax_scatter.set_xlabel('Unhashed (Sparse) Cosine Similarity', fontsize=12)
     ax_scatter.set_ylabel('Hashed Cosine Similarity', fontsize=12)
     ax_scatter.set_title(f'Pairwise Similarity Preservation\n' + 
-                        f'Pearson r={pearson_corr:.4f}, Spearman ρ={spearman_corr:.4f}',
+                        f'Pearson r={pearson_corr:.4f}',
                         fontsize=12)  # Match the bottom title font size
     ax_scatter.legend()
     ax_scatter.grid(alpha=0.3)
