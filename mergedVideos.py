@@ -14,11 +14,6 @@ def make_title(scene: Scene, text="Similarity Preservation in Spectral Hashing")
 # Comprehensive merged scene that combines all the individual scenes
 class SimilarityPreservationComplete(Scene):
     def construct(self):
-        # ========== SECTION 1: Explain binning briefly ==========
-        title = make_title(self, "Spectral Binning and Hashing")
-        self.play(FadeOut(title))
-        
-        
         # ========== Data ==========
         # Create the two sets of vectors (simplified representations)
         
@@ -314,12 +309,13 @@ class SimilarityPreservationComplete(Scene):
         
         # Create explanation texts using VGroup and arrange
         explanation_texts = VGroup(
-            Text("We have the unhashed, binned feature vectors, and the hashed, compressed vectors.", font_size=22),
-            Text("How do we know that the hashing worked correctly?", font_size=22),
-            Text("We need to prove that similar vectors in the original space remain similar in the hashed space.", font_size=22),
-            Text("Alternatively, dissimilar vectors in the original space remain dissimilar in the hashed space.", font_size=22),
-            Text("Let's illustrate this with a simple example.", font_size=22)
-        ).arrange(DOWN, buff=0.3, aligned_edge=LEFT).next_to(understanding_title, DOWN, buff=0.5)
+            Text("We have unhashed, binned feature vectors and", font_size=22),
+            Text("hashed, compressed vectors.", font_size=22),
+            Text("How do we know the hashing worked correctly?", font_size=22),
+            Text("We need to prove similar vectors remain similar", font_size=22),
+            Text("in the hashed space (and vice versa for dissimilar).", font_size=22),
+            Text("Let's illustrate with a simple example.", font_size=22)
+        ).arrange(DOWN, buff=0.3).next_to(understanding_title, DOWN, buff=0.5)
         
         # Display each explanation text sequentially
         for text in explanation_texts:
@@ -537,11 +533,11 @@ class SimilarityPreservationComplete(Scene):
         
         # Explanation text
         explanation = VGroup(
-            Text("• If these two vectors are similar in the original space...", font_size=22),
-            Text("• Then they should remain similarly similar in the hashed space", font_size=22),
-            Text("• This pattern should hold for ALL pairs of vectors", font_size=22),
-            Text("• If this is true, our hashing preserves similarity relationships", font_size=22)
-        ).arrange(DOWN, buff=0.3, aligned_edge=LEFT)
+            Text("• If vectors are similar in original space...", font_size=22),
+            Text("• They should remain similar in hashed space", font_size=22),
+            Text("• This should hold for ALL vector pairs", font_size=22),
+            Text("• If true, our hashing preserves relationships", font_size=22)
+        ).arrange(DOWN, buff=0.3)
         
         explanation.next_to(t_label, DOWN, buff=0.5)
         self.play(Write(explanation[0]))
@@ -742,7 +738,7 @@ class SimilarityPreservationComplete(Scene):
         self.wait(2)
         
         # Final insight about the preservation principle
-        preservation_insight = Text("This is the key: dissimilarity relationships are also maintained across both spaces!", 
+        preservation_insight = Text("Dissimilarity relationships are also maintained across both spaces!", 
                                 font_size=24, color=YELLOW).next_to(t4_dissim_visual, DOWN, buff=0.8)
         self.play(ReplacementTransform(hashed_dissimilar_text, preservation_insight))
         self.wait(3)
