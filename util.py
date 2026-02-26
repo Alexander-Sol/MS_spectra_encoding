@@ -296,7 +296,8 @@ def add_subplot(plotly_fig, fig, row, col, showlegend=False, **kwargs):
     # Update layout properties if needed
     plotly_fig.update_layout(showlegend=showlegend)
 
-
+# change to exponential graph of x = bin size, y = collision rate (mean or median) for peaks in a single spectrum.
+ 
 def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
     """
     Analyze bin collisions between pairs of spectra.
