@@ -67,7 +67,7 @@ def get_all_MS2_objects(mzml_path, max_spectra=None):
 
                 # Process the spectrum
                 processed_spectrum = (su_spectrum.filter_intensity(0.05, 100)
-                                    .remove_precursor_peak(fragment_tol_mass=0.5, fragment_tol_mode='Da')
+                                    .remove_precursor_peak(fragment_tol_mass=10, fragment_tol_mode='ppm') # used 0.5, Da
                                     .scale_intensity('root'))
 
                 # Add processed spectrum to our list
@@ -156,13 +156,13 @@ def get_MS2_object(mzml_path, scan, peptide = None):
 
                 # Process the spectrum
                 su_spectrum = (su_spectrum.filter_intensity(0.05, 100)
-                            .remove_precursor_peak(fragment_tol_mass=0.5, fragment_tol_mode='Da')
+                            .remove_precursor_peak(fragment_tol_mass=10, fragment_tol_mode='ppm') # used to be 0.5, Da
                             .scale_intensity('root'))
                 break
     # Formatting
     if su_spectrum:
-        fragment_tol_mass = 0.5
-        fragment_tol_mode = 'Da'  ## for some reason, if I use 'ppm' it doesn't work
+        fragment_tol_mass = 10
+        fragment_tol_mode = 'ppm'  ## for some reason, if I use 'ppm' it doesn't work
 
         # If given the peptide, spec_utils can annotate the peaks
         if peptide:
@@ -300,11 +300,11 @@ def add_subplot(plotly_fig, fig, row, col, showlegend=False, **kwargs):
  
 def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
     """
-    Analyze bin collisions between pairs of spectra.
+    Analyze bin collisions WITHIN each spectrum.
     
-    For each pair of spectra, counts how many bins they share in common.
-    With coarse bins (1.0 Da), different spectra will falsely share many bins.
-    With fine bins (0.01 Da), truly different spectra should share very few bins.
+    For each spectrum, counts how many peak pairs fall into the same bin.
+    With coarse bins (1.0 Th), many peaks will collide (high collision count).
+    With fine bins (0.04 Th), few peaks will collide (low collision count).
     
     Parameters
     ----------
@@ -314,10 +314,19 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
         Maximum number of spectra to analyze (for performance)
     """
     
-    def spectrum_to_bin_set(mz_array, bin_width):
-        """Convert spectrum m/z values to a set of bin indices."""
+    def count_within_spectrum_collisions(mz_array, bin_width):
+        """Count collision pairs within a single spectrum at given bin width."""
+        from collections import Counter
+        
         bin_ids = np.floor(np.asarray(mz_array) / bin_width).astype(np.int64)
-        return set(bin_ids)
+        
+        # Count how many peaks fall in each bin
+        bin_counts = Counter(bin_ids)
+        
+        # Count total collision pairs: for each bin with n peaks, we have C(n,2) = n*(n-1)/2 collisions
+        collision_pairs = sum(count * (count - 1) // 2 for count in bin_counts.values())
+        
+        return collision_pairs
     
     # Get all spectra
     all_spectra = get_all_MS2_objects(mzml_path=mzml_path, max_spectra=max_spectra)
@@ -325,95 +334,76 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
         all_spectra = all_spectra[:max_spectra]
     n_spectra = len(all_spectra)
     
-    bin_widths = (1.0, 0.01, 500.0)
+    bin_widths = (1.0, 0.04)
     
-    # Pre-compute bin sets for all spectra at both bin widths
-    bin_sets = {}
-    for width in bin_widths:
-        bin_sets[width] = [spectrum_to_bin_set(ms2.mz, width) for ms2 in all_spectra]
+    # Count within-spectrum collisions for each spectrum and bin width
+    collisions_by_width = {width: [] for width in bin_widths}
+    spectrum_sizes = []
     
-    # For each PAIR of spectra, count shared bins (collisions)
-    pairwise_collisions = {width: [] for width in bin_widths}
+    for spectrum in all_spectra:
+        spectrum_sizes.append(len(spectrum.mz))
+        for width in bin_widths:
+            collision_count = count_within_spectrum_collisions(spectrum.mz, width)
+            collisions_by_width[width].append(collision_count)
     
-    for i in range(n_spectra):
-        for j in range(i + 1, n_spectra):  # Only upper triangle, no self-comparison
-            for width in bin_widths:
-                bins_i = bin_sets[width][i]
-                bins_j = bin_sets[width][j]
-                shared_bins = len(bins_i & bins_j)  # Intersection = shared bins
-                # Normalize by the smaller spectrum's size
-                min_size = min(len(bins_i), len(bins_j))
-                collision_rate = shared_bins / min_size if min_size > 0 else 0
-                pairwise_collisions[width].append(collision_rate)
+    # Convert to arrays
+    collisions_1da = np.array(collisions_by_width[1.0])
+    collisions_004da = np.array(collisions_by_width[0.04])
+    spectrum_sizes = np.array(spectrum_sizes)
     
-    # Convert to arrays for statistics
-    collisions_1da = np.array(pairwise_collisions[1.0])
-    collisions_001da = np.array(pairwise_collisions[0.01])
-    collisions_500da = np.array(pairwise_collisions[500.0])
-    
-    n_pairs = len(collisions_1da)
+    # Compute collision rates (collisions per max possible peak pairs in spectrum)
+    # Max possible collisions for a spectrum with n peaks is C(n,2) = n*(n-1)/2
+    max_possible_collisions = spectrum_sizes * (spectrum_sizes - 1) / 2
+    collision_rate_1da = collisions_1da / (max_possible_collisions)
+    collision_rate_004da = collisions_004da / (max_possible_collisions)
     
     # Summary statistics
-    print(f"=== Pairwise Spectrum Collision Analysis ===")
+    print(f"=== Within-Spectrum Collision Analysis ===")
     print(f"File: {mzml_path}")
     print(f"Spectra analyzed: {n_spectra}")
-    print(f"Total pairs compared: {n_pairs:,}")
-    
-    print(f"\n--- Bin Size = 500.0 Da ---")
-    print(f"  Mean collision rate per pair: {collisions_500da.mean()*100:.2f}%")
-    print(f"  Median collision rate: {np.median(collisions_500da)*100:.2f}%")
-    print(f"  Max collision rate: {collisions_500da.max()*100:.2f}%")
-    print(f"  Pairs with >50% collision: {(collisions_500da > 0.5).sum():,} ({(collisions_500da > 0.5).mean()*100:.1f}%)")
+    print(f"Mean spectrum size: {spectrum_sizes.mean():.1f} peaks")
 
-    print(f"\n--- Bin Size = 1.0 Da ---")
-    print(f"  Mean collision rate per pair: {collisions_1da.mean()*100:.2f}%")
-    print(f"  Median collision rate: {np.median(collisions_1da)*100:.2f}%")
-    print(f"  Max collision rate: {collisions_1da.max()*100:.2f}%")
-    print(f"  Pairs with >50% collision: {(collisions_1da > 0.5).sum():,} ({(collisions_1da > 0.5).mean()*100:.1f}%)")
+    print(f"\n--- Bin Size = 1.0 Th ---")
+    print(f"  Mean collision pairs per spectrum: {collisions_1da.mean():.1f}")
+    print(f"  Median collision pairs: {np.median(collisions_1da):.1f}")
+    print(f"  Max collision pairs: {collisions_1da.max():.0f}")
+    print(f"  Mean collision rate (% of max possible): {collision_rate_1da.mean()*100:.2f}%")
+
+    print(f"\n--- Bin Size = 0.04 Th ---")
+    print(f"  Mean collision pairs per spectrum: {collisions_004da.mean():.1f}")
+    print(f"  Median collision pairs: {np.median(collisions_004da):.1f}")
+    print(f"  Max collision pairs: {collisions_004da.max():.0f}")
+    print(f"  Mean collision rate (% of max possible): {collision_rate_004da.mean()*100:.2f}%")
     
-    print(f"\n--- Bin Size = 0.01 Da ---")
-    print(f"  Mean collision rate per pair: {collisions_001da.mean()*100:.2f}%")
-    print(f"  Median collision rate: {np.median(collisions_001da)*100:.2f}%")
-    print(f"  Max collision rate: {collisions_001da.max()*100:.2f}%")
-    print(f"  Pairs with >50% collision: {(collisions_001da > 0.5).sum():,} ({(collisions_001da > 0.5).mean()*100:.1f}%)")
-        
     print(f"\n--- Improvement ---")
-    print(f"  Reduction in mean collision rate (0.01 vs 1.0 Da): {(1 - collisions_001da.mean()/collisions_1da.mean())*100:.1f}%")
-    print(f"  Change in mean collision rate (500.0 vs 1.0 Da): {(1 - collisions_500da.mean()/collisions_1da.mean())*100:.1f}%")
-    
-    # Visualization: Distribution of collision rates (now including 500 Da)
-    fig, axes = subplots(1, 3, figsize=(21, 5))
-    
-    # Left: 500.0 Da bin collisions
-    axes[2].hist(collisions_500da * 100, bins=30, alpha=0.7, color='seagreen', edgecolor='black')
-    axes[2].axvline(collisions_500da.mean() * 100, color='darkgreen', linestyle='--', 
-                    linewidth=2, label=f"Mean: {collisions_500da.mean()*100:.1f}%")
-    axes[2].set_xlabel('Collision Rate Between Spectrum Pairs (%)')
-    axes[2].set_ylabel('Frequency')
-    axes[2].set_title('Pairwise Collisions (Bin = 500.0 Da)\nVery Large Bins => High False Similarity')
-    axes[2].legend()
-    axes[2].grid(True, alpha=0.3)
+    print(f"  Reduction in mean collisions (0.04 vs 1.0 Th): {(1 - collisions_004da.mean()/collisions_1da.mean())*100:.1f}%")
 
-    # Middle: 1.0 Da bin collisions
-    axes[0].hist(collisions_1da * 100, bins=30, alpha=0.7, color='coral', edgecolor='black')
-    axes[0].axvline(collisions_1da.mean() * 100, color='red', linestyle='--', 
-                    linewidth=2, label=f"Mean: {collisions_1da.mean()*100:.1f}%")
-    axes[0].set_xlabel('Collision Rate Between Spectrum Pairs (%)')
-    axes[0].set_ylabel('Frequency')
-    axes[0].set_title('Pairwise Collisions (Bin = 1.0 Da)\nHigher = More False Similarity')
+    # Visualization: Distribution of collision counts within spectra
+    fig, axes = subplots(1, 2, figsize=(14, 5))
+
+    # Left: 1.0 Th collisions
+    axes[0].hist(collisions_1da, bins=30, alpha=0.7, color='coral', edgecolor='black')
+    axes[0].axvline(collisions_1da.mean(), color='red', linestyle='--', 
+                    linewidth=2, label=f"Mean: {collisions_1da.mean():.1f}")
+    axes[0].set_xlabel('Collision Pairs Within Spectrum')
+    axes[0].set_ylabel('Frequency (# of spectra)')
+    axes[0].set_title('Within-Spectrum Collisions (Bin = 1.0 Th)\nHigher = More False Positives')
+    axes[0].set_xticks(np.arange(collisions_1da.min(), collisions_1da.max() + 1, 1))
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
     
-    # Right: 0.01 Da bin collisions
-    axes[1].hist(collisions_001da * 100, bins=30, alpha=0.7, color='steelblue', edgecolor='black')
-    axes[1].axvline(collisions_001da.mean() * 100, color='darkblue', linestyle='--', 
-                    linewidth=2, label=f"Mean: {collisions_001da.mean()*100:.1f}%")
-    axes[1].set_xlabel('Collision Rate Between Spectrum Pairs (%)')
-    axes[1].set_ylabel('Frequency')
-    axes[1].set_title('Pairwise Collisions (Bin = 0.01 Da)\nLower = Better Discrimination')
+    # Right: 0.04 Th collisions
+    axes[1].hist(collisions_004da, bins=30,  # Match the number of bins to the left plot
+                 alpha=0.7, color='steelblue', edgecolor='black')
+    axes[1].axvline(collisions_004da.mean(), color='darkblue', linestyle='--', 
+                    linewidth=2, label=f"Mean: {collisions_004da.mean():.1f}")
+    axes[1].set_xlabel('Collision Pairs Within Spectrum')
+    axes[1].set_ylabel('Frequency (# of spectra)')
+    axes[1].set_title('Within-Spectrum Collisions (Bin = 0.04 Th)\nLower = Better Discrimination')
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
-    
+    axes[1].set_xticks(np.arange(collisions_004da.min(), collisions_004da.max() + 1, 1))
+
     plt.tight_layout()
     plt.show()
 
