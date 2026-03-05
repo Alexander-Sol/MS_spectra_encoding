@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 import numpy as np
 import spectrum_utils.plot as sup
@@ -297,7 +299,7 @@ def add_subplot(plotly_fig, fig, row, col, showlegend=False, **kwargs):
     plotly_fig.update_layout(showlegend=showlegend)
 
 
-def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
+def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None, spectra_to_compare=None):
     """
     Analyze bin collisions between pairs of spectra.
     
@@ -311,6 +313,7 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
         Path to the mzML file
     max_spectra : int
         Maximum number of spectra to analyze (for performance)
+    spectra_to_compare : list of ints specifcying scan numbers to compare (if None, will use all spectra up to max_spectra)
     """
     
     def spectrum_to_bin_set(mz_array, bin_width):
@@ -320,7 +323,9 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
     
     # Get all spectra
     all_spectra = get_all_MS2_objects(mzml_path=mzml_path, max_spectra=max_spectra)
-    if max_spectra is not None and len(all_spectra) > max_spectra:
+    if spectra_to_compare is not None:
+        all_spectra = [s for s in all_spectra if s.scan_number in spectra_to_compare]
+    elif max_spectra is not None and len(all_spectra) > max_spectra:
         all_spectra = all_spectra[:max_spectra]
     n_spectra = len(all_spectra)
     
@@ -418,16 +423,39 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
 
 
 # @title Proving Similarity preservation empirically 
-def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.04, hash_buckets = 10000,max_spectra=300):
+def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.04, hash_buckets = 10000, max_spectra=300, spectra_idx_to_compare=None):
     import mmh3
+    import re
       # Demonstrate similarity preservation between original sparse maps and hashed vectors
       # Let's get multiple spectra and compare their similarities
 
+    def get_scan_number_from_spectrum_id(spectrum_id):
+        """Extract scan number from spectrum ID string."""    
+        match = re.search(r'scan=(\d+)', spectrum_id)
+        if match:
+            return int(match.group(1))
+        else:
+            raise ValueError(f"Could not extract scan number from spectrum ID: {spectrum_id}")
+
     # Get spectra (stop early if max_spectra provided)
-    spectra_to_compare = get_all_MS2_objects(mzml_path, max_spectra=max_spectra)
-    if max_spectra and len(spectra_to_compare) > max_spectra:
+    spectra_to_compare = None
+    if spectra_idx_to_compare is not None:
+        spectra_to_compare = get_all_MS2_objects(mzml_path)
+        scan_num = lambda s: get_scan_number_from_spectrum_id(s.identifier)
+        spectra_to_compare = [s for s in spectra_to_compare if scan_num(s) in spectra_idx_to_compare]
+    elif max_spectra is not None:
+        spectra_to_compare = get_all_MS2_objects(mzml_path, max_spectra=max_spectra)
         spectra_to_compare = spectra_to_compare[:max_spectra]
+    else:
+        spectra_to_compare = get_all_MS2_objects(mzml_path)
+
+    # make sure all the spectra we loaded have peaks!
+    n_spectra_before = len(spectra_to_compare)
+    spectra_to_compare = [s for s in spectra_to_compare if len(s.intensity) > 0]
     n_spectra = len(spectra_to_compare)
+
+
+    print(f"Comparing {n_spectra} spectra (out of {n_spectra_before} loaded)")
 
     # Convert each spectrum to sparse map and hash vector representations
     sparse_maps = []
@@ -536,20 +564,18 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     for spec_data in spectra_to_compare:
         sparse_map = create_sparse_map(spec_data.mz, spec_data.intensity)
         sparse_map_keys |= set(sparse_map.keys())
+        sparse_maps.append(sparse_map)
     
     # Create dictionary mapping sparse map keys to their hashed bucket indices (for analysis)
     key_to_bucket = {}
     for key in sparse_map_keys:
         bucket_idx = mmh3.hash(str(key), seed=42) % hash_buckets
         key_to_bucket[key] = bucket_idx
-        
-    sparse_maps.append(sparse_map)
-
+     
+    # Now create hash vectors using the new mapping function that relies on pre-computed key_to_bucket
     for sparse_map in sparse_maps:
         hash_vec = sparse_map_to_hash_vector_2(sparse_map, key_to_bucket, hash_buckets)
         hash_vectors.append(hash_vec)
-
-
 
     Xh = np.array(hash_vectors)
 
@@ -631,9 +657,6 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     upper_indices = np.triu_indices(n_spectra, k=1)
     sparse_upper = sparse_similarities[upper_indices]
     hash_upper = hash_similarities[upper_indices]
-
-    
-    
     
     perp = min(30, max(5, (n_spectra // 3)))
     
