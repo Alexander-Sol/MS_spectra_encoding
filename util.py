@@ -418,7 +418,7 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
 
 
 # @title Proving Similarity preservation empirically 
-def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=300):
+def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.04, hash_buckets = 10000,max_spectra=300):
     import mmh3
       # Demonstrate similarity preservation between original sparse maps and hashed vectors
       # Let's get multiple spectra and compare their similarities
@@ -433,8 +433,8 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     sparse_maps = []
     hash_vectors = []
     
-    WIDTH_OF_BIN = 0.01
-    hash_buckets = 10000  # Increased from 800 to reduce collisions with ~100k dimensional space
+    WIDTH_OF_BIN = bin_width
+    hash_buckets = hash_buckets  # Increased from 800 to reduce collisions with ~100k dimensional space
 
     def normalize_intensity():
         """Normalize intensities across all spectra to range [0,1]"""
@@ -490,6 +490,16 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
             bucket_idx = mmh3.hash(str(sparse_idx), seed=42) % num_buckets
             hash_vec[bucket_idx] += intensity
         return hash_vec
+    
+    def sparse_map_to_hash_vector_2(sparse_map, key_to_bucket, num_buckets=hash_buckets):
+        """Convert sparse map to hash vector using pre-computed key_to_bucket mapping"""
+        hash_vec = [0] * num_buckets
+        for sparse_idx, intensity in sparse_map.items():
+            bucket_idx = key_to_bucket.get(sparse_idx)
+            if bucket_idx is not None:
+                hash_vec[bucket_idx] += intensity
+        return hash_vec
+
     def cosine_similarity(vec1, vec2):
         """Calculate cosine similarity between two vectors (returns value between 0 and 1)"""
         vec1 = np.array(vec1)
@@ -520,12 +530,23 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
         # Calculate cosine similarity using the dot_product function
         return cosine_similarity(vec1, vec2)
 
+
+    sparse_map_keys = set()
     # Create representations for each spectrum
     for spec_data in spectra_to_compare:
         sparse_map = create_sparse_map(spec_data.mz, spec_data.intensity)
-        hash_vec = sparse_map_to_hash_vector(sparse_map,hash_buckets)
+        sparse_map_keys |= set(sparse_map.keys())
+    
+    # Create dictionary mapping sparse map keys to their hashed bucket indices (for analysis)
+    key_to_bucket = {}
+    for key in sparse_map_keys:
+        bucket_idx = mmh3.hash(str(key), seed=42) % hash_buckets
+        key_to_bucket[key] = bucket_idx
         
-        sparse_maps.append(sparse_map)
+    sparse_maps.append(sparse_map)
+
+    for sparse_map in sparse_maps:
+        hash_vec = sparse_map_to_hash_vector_2(sparse_map, key_to_bucket, hash_buckets)
         hash_vectors.append(hash_vec)
 
 
@@ -536,6 +557,8 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     all_indices = set()
     for sm in sparse_maps:
         all_indices |= set(sm.keys())
+
+    print(f"Total unique bins across all spectra: {len(all_indices)}")
 
     max_idx = max(all_indices)
     n_bins = max_idx + 1
