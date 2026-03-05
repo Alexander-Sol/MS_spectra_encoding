@@ -20,7 +20,7 @@ import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import RobustScaler
-from sklearn.manifold import TSNE
+import umap
 
 
 
@@ -665,10 +665,10 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     Xs_pca_aligned = Xs_pca[:, :min_cols]
     Xh_pca_aligned = Xh_pca[:, :min_cols]
     
-    # Run t-SNE on combined data
+    # Run UMAP on combined data
     combined_pca = np.vstack([Xs_pca_aligned, Xh_pca_aligned])
-    tsne_combined = TSNE(n_components=2, perplexity=perp, random_state=0, init='pca')
-    combined_2d = tsne_combined.fit_transform(combined_pca)
+    umap_combined = umap.UMAP(n_components=2, n_neighbors=perp, min_dist=0.1, random_state=0)
+    combined_2d = umap_combined.fit_transform(combined_pca)
     
     # Split back into unhashed and hashed embeddings
     Xs2 = combined_2d[:n_spectra]
