@@ -424,8 +424,8 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     sparse_maps = []
     hash_vectors = []
     
-    WIDTH_OF_BIN = 0.01
-    hash_buckets = 10000  # Increased from 800 to reduce collisions with ~100k dimensional space
+    WIDTH_OF_BIN = 0.04
+    hash_buckets = 1000  # Increased from 800 to reduce collisions with ~100k dimensional space
 
     def normalize_intensity():
         """Normalize intensities across all spectra to range [0,1]"""
@@ -626,7 +626,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     except Exception as e:
         logging.getLogger(__name__).warning('KMeans failed: %s', e)
         return
-    
+
     labels_shared = km_combined.labels_[:n_spectra]  # Use first half for both plots
 
     # Calculate centers for visualization based on actual cluster assignments in shared space
