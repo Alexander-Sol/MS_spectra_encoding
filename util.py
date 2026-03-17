@@ -423,7 +423,7 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None, spectra
 
 
 # @title Proving Similarity preservation empirically 
-def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.04, hash_buckets = 10000, max_spectra=300, spectra_idx_to_compare=None):
+def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.04, hash_buckets = 10000, max_spectra=300, spectra_idx_to_compare=None, k_means=None):
     import mmh3
     import re
       # Demonstrate similarity preservation between original sparse maps and hashed vectors
@@ -675,7 +675,11 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     Xh2 = combined_2d[n_spectra:]
     
     # Cluster on the combined 2D embedding with shared clustering
-    N_CLUSTERS = 12
+    if k_means is not None:
+        N_CLUSTERS = k_means
+    else:
+        N_CLUSTERS = 12
+        
     try:
         km_combined = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(combined_2d)
     except Exception as e:
