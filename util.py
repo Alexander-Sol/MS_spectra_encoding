@@ -453,7 +453,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     n_spectra_before = len(spectra_to_compare)
     spectra_to_compare = [s for s in spectra_to_compare if len(s.intensity) > 0]
     n_spectra = len(spectra_to_compare)
-
+    scan_numbers = [get_scan_number_from_spectrum_id(s.identifier) for s in spectra_to_compare]
 
     print(f"Comparing {n_spectra} spectra (out of {n_spectra_before} loaded)")
 
@@ -669,6 +669,19 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     combined_pca = np.vstack([Xs_pca_aligned, Xh_pca_aligned])
     umap_combined = umap.UMAP(n_components=2, n_neighbors=perp, min_dist=0.1, random_state=0)
     combined_2d = umap_combined.fit_transform(combined_pca)
+
+    # from sklearn.manifold import TSNE
+    # #  Run t-SNE on combined data
+    # combined_pca = np.vstack([Xs_pca_aligned, Xh_pca_aligned])
+    # perp = min(30, max(5, (combined_pca.shape[0] - 1) // 3))
+    # tsne = TSNE(
+    #     n_components=2,
+    #     perplexity=perp,
+    #     random_state=0,
+    #     init='pca',
+    #     learning_rate='auto'
+    # )
+    # combined_2d = tsne.fit_transform(combined_pca)
     
     # Split back into unhashed and hashed embeddings
     Xs2 = combined_2d[:n_spectra]
@@ -777,6 +790,10 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
             ax.scatter(X2[out_mask,0], X2[out_mask,1], c='lightgray', 
                     s=18, alpha=0.8, label='outliers')
         ax.scatter(centers[:,0], centers[:,1], c='k', marker='x', s=60)
+        # Label points with scan numbers
+        for i in range(len(X2)): 
+            ax.text(X2[i, 0], X2[i, 1], str(scan_numbers[i]),
+            fontsize=6, alpha=0.8)
         ax.set_title(title, fontsize=12)
         ax.set_xlabel('Dim1')
         ax.set_ylabel('Dim2')
