@@ -679,7 +679,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
         N_CLUSTERS = k_means
     else:
         N_CLUSTERS = 12
-        
+
     try:
         km_combined = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(combined_2d)
     except Exception as e:
@@ -694,6 +694,11 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
                         else np.zeros(Xs2.shape[1]) for k in range(N_CLUSTERS)])
     centers_h = np.array([Xh2[labels_shared == k].mean(axis=0) if (labels_shared == k).any() 
                         else np.zeros(Xh2.shape[1]) for k in range(N_CLUSTERS)])
+    
+    # Make sure to only keep valid clusters that have points assigned to them for better visualization
+    valid_clusters = np.array([(labels_shared == k).any() for k in range(N_CLUSTERS)])
+    centers_s_valid = centers_s[valid_clusters]
+    centers_h_valid = centers_h[valid_clusters]
 
     # Detect outliers using shared clustering
     dists_s = np.linalg.norm(Xs2 - centers_s[labels_shared], axis=1)
@@ -777,9 +782,9 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
         ax.set_ylabel('Dim2')
         ax.grid(alpha=0.25)
 
-    plot_with_shared_colors(axes[0], Xs2, centers_s, labels_shared, out_s,
+    plot_with_shared_colors(axes[0], Xs2, centers_s_valid, labels_shared, out_s,
                             f'Unhashed (Full Precision) - {N_CLUSTERS} clusters')
-    plot_with_shared_colors(axes[1], Xh2, centers_h, labels_shared, out_h,
+    plot_with_shared_colors(axes[1], Xh2, centers_h_valid, labels_shared, out_h,
                             f'Hashed ({hash_buckets} buckets) - Same {N_CLUSTERS} clusters')
 
     plt.tight_layout()
