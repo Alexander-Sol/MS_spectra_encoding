@@ -123,7 +123,11 @@ class SinusoidalPE(Scene):
         indices = list(range(D_SIN - 1, -1, -1))
 
         lambda_lbl = MathTex(rf"\lambda_{{{indices[0]}}}", font_size=30).next_to(formula_lbl, RIGHT, buff=1.5)
-        coord_lbl = Text("(600, 0.000)", font_size=24).next_to(lambda_lbl, DOWN, buff=0.2)
+        # Using separate parts for (600, and y_val) to allow specific highlighting
+        mz_part = Text("(600, ", font_size=24)
+        val_part = Text("0.000)", font_size=24).next_to(mz_part, RIGHT, buff=0.1)
+        coord_lbl = VGroup(mz_part, val_part).next_to(lambda_lbl, DOWN, buff=0.2)
+        
         self.play(FadeIn(lambda_lbl), FadeIn(coord_lbl))
         
         for i, idx in enumerate(indices):
@@ -145,28 +149,31 @@ class SinusoidalPE(Scene):
             dot = Dot(wave_ax.c2p(600, y_val), color=color, radius=0.06)
             
             new_lambda_lbl = MathTex(rf"\lambda_{{{idx}}}", font_size=30).next_to(formula_lbl, RIGHT, buff=1.5)
-            new_coord_lbl = Text(f"(600, {y_val:.3f})", font_size=24).next_to(new_lambda_lbl, DOWN, buff=0.2)
+            # Create a new val_part and VGroup for the update
+            new_val_text = f"{y_val:.3f})"
+            new_val_part = Text(new_val_text, font_size=24).next_to(mz_part, RIGHT, buff=0.1)
+            new_coord_lbl = VGroup(mz_part, new_val_part)
 
             # Highlight circle for the new point
             highlight_circle = Circle(radius=0.15, color=YELLOW, stroke_width=3).move_to(dot.get_center())
-            # Highlight circle for the updating coordinates
-            coord_highlight = Circle(radius=0.5, color=YELLOW, stroke_width=3).move_to(coord_lbl.get_center()).scale(0.5)
+            # Highlight circle ONLY for the updating value part
+            val_highlight = Circle(radius=0.4, color=YELLOW, stroke_width=3).move_to(new_val_part.get_center()).scale(0.5)
 
             self.play(
                 Create(wave),
                 FadeIn(dot),
                 Transform(lambda_lbl, new_lambda_lbl),
-                Transform(coord_lbl, new_coord_lbl),
+                Transform(val_part, new_val_part),
                 Succession(
                     FadeIn(highlight_circle, scale=0.5),
                     FadeOut(highlight_circle, scale=1.5),
                 ),
                 Succession(
-                    FadeIn(coord_highlight, scale=0.5),
-                    FadeOut(coord_highlight, scale=1.5),
+                    FadeIn(val_highlight, scale=0.5),
+                    FadeOut(val_highlight, scale=1.5),
                 ),
                 Flash(dot, color=YELLOW, line_length=0.1, flash_radius=0.2),
-                run_time=2.0 # Adjusted to 2 seconds as requested
+                run_time=2.0
             )
             intersection_dots.add(dot)
             waves.add(wave)
