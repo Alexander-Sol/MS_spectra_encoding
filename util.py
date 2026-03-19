@@ -13,6 +13,7 @@ import numpy as np
 import numpy as np
 from scipy.spatial import distance
 import pandas as pd
+import re
 
 
 from sklearn.cluster import KMeans
@@ -47,6 +48,19 @@ AMINO_ACID_DICT = {'A': 71.037114, 'R':156.101111 , 'N': 114.042927,
 PROTON_MASS = 1.007276466812
 HYDROGEN_MASS = 1.00784
 OXYGEN_MASS = 15.994915
+
+
+def extract_scan_number(scan_id):
+    """Extract the integer scan number from an mzML-style spectrum id string."""
+    if isinstance(scan_id, int):
+        return scan_id
+
+    match = re.search(r"(?:^|\s)scan=(\d+)(?:\s|$)", str(scan_id))
+    if match is None:
+        raise ValueError(f"Could not extract scan number from {scan_id!r}")
+
+    return int(match.group(1))
+
 
 
 def get_all_MS2_objects(mzml_path, max_spectra=None):
@@ -142,7 +156,7 @@ def get_MS2_object(mzml_path, scan, peptide = None):
     su_spectrum = None
     with pyteomics.mzml.read(mzml_path) as spectra:
         for spectrum in spectra:
-            scanNumber = int(spectrum['id'].split('=')[-1])
+            scanNumber = extract_scan_number(spectrum['id'])
             if scanNumber == scan:
                 # This finds the cooresponding values in the .mzml file to create our MS2 for a given scan (see the params)
                 spectrum_id = spectrum['id']
@@ -190,7 +204,7 @@ def get_MS1_object(mzml_path, scan, peptide = None):
     
     with pyteomics.mzml.read(mzml_path) as spectra:
         for spectrum in spectra:
-            scanNumber = int(spectrum['id'].split('=')[-1])
+            scanNumber = extract_scan_number(spectrum['id'])
             if scanNumber == scan:
                 # Extract spectrum data
                 spectrum_id = spectrum['id']
@@ -245,7 +259,6 @@ def get_MS1_object(mzml_path, scan, peptide = None):
     
     return None
 
-
 def plot_MS2(ms2_spectrum, title=None, parent=None):
     """Plot an MS2 spectrum. Prefer converting the matplotlib figure to Plotly
     if plotly.tools.mpl_to_plotly is available, otherwise fall back to
@@ -266,8 +279,10 @@ def plot_MS2(ms2_spectrum, title=None, parent=None):
             # Set the title if provided
             if title:
                 plotly_fig['layout']['title'] = title
+            elif ms2_spectrum and hasattr(ms2_spectrum, 'identifier'):
+                plotly_fig['layout']['title'] = f'MS2 Spectrum - Scan {extract_scan_number(ms2_spectrum.identifier)}'
             else:
-                plotly_fig['layout']['title'] = f'MS1 Spectrum - Scan {ms2_spectrum.scan_number}'
+                plotly_fig['layout']['title'] = 'MS2 Spectrum'
             plotly_fig.update_yaxes(range=[0, 1.05])  # Adjust y-axis range as needed
             return plotly_fig
         except Exception:
@@ -481,6 +496,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
             bucket_idx = mmh3.hash(str(sparse_idx), seed=42) % num_buckets
             hash_vec[bucket_idx] += intensity
         return hash_vec
+    
     def cosine_similarity(vec1, vec2):
         """Calculate cosine similarity between two vectors (returns value between 0 and 1)"""
         vec1 = np.array(vec1)
