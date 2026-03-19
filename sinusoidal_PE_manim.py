@@ -109,7 +109,7 @@ class SinusoidalPE(Scene):
             Create(wave_ax)
         )
 
-        formula_lbl = MathTex(r"\sin(\mathrm{m/z}/\lambda_i)", font_size=32).next_to(question, DOWN, buff=0.4)
+        formula_lbl = MathTex(r"\sin\left(\frac{\mathrm{m/z}}{\lambda_i}\right)", font_size=32).next_to(question, DOWN, buff=0.4)
         self.play(FadeIn(formula_lbl))
 
         # Draw waves from slow (index 6) to fast (index 0)
@@ -122,7 +122,7 @@ class SinusoidalPE(Scene):
         # Indices in descending order for slow to fast
         indices = list(range(D_SIN - 1, -1, -1))
 
-        lambda_lbl = MathTex(rf"\lambda_{{{indices[0]}}}", font_size=30).next_to(formula_lbl, RIGHT, buff=0.5)
+        lambda_lbl = MathTex(rf"\lambda_{{{indices[0]}}}", font_size=30).next_to(formula_lbl, RIGHT, buff=1.5)
         coord_lbl = Text("(600, 0.000)", font_size=24).next_to(lambda_lbl, DOWN, buff=0.2)
         self.play(FadeIn(lambda_lbl), FadeIn(coord_lbl))
         
@@ -144,11 +144,13 @@ class SinusoidalPE(Scene):
             y_vals.append(y_val)
             dot = Dot(wave_ax.c2p(600, y_val), color=color, radius=0.06)
             
-            new_lambda_lbl = MathTex(rf"\lambda_{{{idx}}}", font_size=30).next_to(formula_lbl, RIGHT, buff=0.5)
+            new_lambda_lbl = MathTex(rf"\lambda_{{{idx}}}", font_size=30).next_to(formula_lbl, RIGHT, buff=1.5)
             new_coord_lbl = Text(f"(600, {y_val:.3f})", font_size=24).next_to(new_lambda_lbl, DOWN, buff=0.2)
 
             # Highlight circle for the new point
             highlight_circle = Circle(radius=0.15, color=YELLOW, stroke_width=3).move_to(dot.get_center())
+            # Highlight circle for the updating coordinates
+            coord_highlight = Circle(radius=0.5, color=YELLOW, stroke_width=3).move_to(coord_lbl.get_center()).scale(0.5)
 
             self.play(
                 Create(wave),
@@ -159,8 +161,12 @@ class SinusoidalPE(Scene):
                     FadeIn(highlight_circle, scale=0.5),
                     FadeOut(highlight_circle, scale=1.5),
                 ),
+                Succession(
+                    FadeIn(coord_highlight, scale=0.5),
+                    FadeOut(coord_highlight, scale=1.5),
+                ),
                 Flash(dot, color=YELLOW, line_length=0.1, flash_radius=0.2),
-                run_time=3.0 # Slowed down from 2.5
+                run_time=2.0 # Adjusted to 2 seconds as requested
             )
             intersection_dots.add(dot)
             waves.add(wave)
