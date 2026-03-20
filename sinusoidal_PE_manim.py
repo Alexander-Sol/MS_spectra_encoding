@@ -46,7 +46,7 @@ class SinusoidalPE(Scene):
         int_lbl = Text("Intensity", font_size=24).next_to(spectrum_ax.y_axis, LEFT, buff=0.2)
 
         # Create a realistic looking mass spectrum with many peaks
-        np.random.seed(42)
+        np.random.seed(43)
         peak_positions = np.random.uniform(100, 900, 40)
         peak_heights = np.random.uniform(20, 95, 40)
 
@@ -150,31 +150,29 @@ class SinusoidalPE(Scene):
             
             new_lambda_lbl = MathTex(rf"\lambda_{{{idx}}}", font_size=30).next_to(formula_lbl, RIGHT, buff=1.5)
             # Create a new val_part and VGroup for the update
-            new_val_text = f"{y_val:.3f})"
-            new_val_part = Text(new_val_text, font_size=24).next_to(mz_part, RIGHT, buff=0.1)
+            display_y = 0.0 if abs(y_val) < 1e-4 else y_val
+            new_val_text = f"{display_y:.3f})"
+            new_val_part = Text(new_val_text, font_size=24, color=color).next_to(mz_part, RIGHT, buff=0.1)
             new_coord_lbl = VGroup(mz_part, new_val_part)
 
             # Highlight circle for the new point
             highlight_circle = Circle(radius=0.15, color=YELLOW, stroke_width=3).move_to(dot.get_center())
-            # Highlight circle ONLY for the updating value part
-            val_highlight = Circle(radius=0.4, color=YELLOW, stroke_width=3).move_to(new_val_part.get_center()).scale(0.5)
 
             self.play(
                 Create(wave),
                 FadeIn(dot),
                 Transform(lambda_lbl, new_lambda_lbl),
-                Transform(val_part, new_val_part),
+                FadeOut(val_part, shift=UP*0.2),
+                FadeIn(new_val_part, shift=UP*0.2),
                 Succession(
                     FadeIn(highlight_circle, scale=0.5),
                     FadeOut(highlight_circle, scale=1.5),
                 ),
-                Succession(
-                    FadeIn(val_highlight, scale=0.5),
-                    FadeOut(val_highlight, scale=1.5),
-                ),
+                Flash(new_val_part, color=color, line_length=0.1, flash_radius=0.3),
                 Flash(dot, color=YELLOW, line_length=0.1, flash_radius=0.2),
                 run_time=2.0
             )
+            val_part = new_val_part # Update reference for next iteration
             intersection_dots.add(dot)
             waves.add(wave)
             self.wait(0.2)
@@ -182,7 +180,7 @@ class SinusoidalPE(Scene):
         self.wait(2)
 
         # Transition to vector form
-        values_str = " \\\\ ".join(f"{y:.3f}" for y in y_vals)
+        values_str = " \\\\ ".join(f"{0.0 if abs(y) < 1e-4 else y:.3f}" for y in y_vals)
         vec = MathTex(
             r"\mathbf{p}(600) = \begin{bmatrix}" + values_str + r"\end{bmatrix}",
             font_size=32,
@@ -196,7 +194,8 @@ class SinusoidalPE(Scene):
             FadeOut(waves),
             FadeOut(intersection_dots),
             FadeOut(lambda_lbl),
-            FadeOut(coord_lbl),
+            FadeOut(mz_part),
+            FadeOut(val_part),
             FadeOut(formula_lbl),
             FadeOut(wave_ax),
             FadeOut(bar_600),
