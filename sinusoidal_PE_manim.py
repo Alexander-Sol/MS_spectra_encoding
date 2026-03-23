@@ -3,13 +3,13 @@ import numpy as np
 
 # ── Constants ─────────────────────────────────────────────────────────
 # Target values at m/z = 600 from the "Low-Dimensional Numerical Example"
-# in 03_Casanovo.ipynb (λ1..λ5). We build visually nice waves that hit these
+# in 03_Casanovo.ipynb (λ0..λ5). We build visually nice waves that hit these
 # exact values at x=600, even if the periods are "fake."
-TARGET_VALUES_600 = np.array([0.424, -0.392, -0.781, -0.045, 0.368])
+TARGET_VALUES_600 = np.array([-0.000, 0.364, -0.782, -0.973, -0.059, -0.588])
 D_SIN = len(TARGET_VALUES_600)
 
 # Choose visually reasonable periods (shortest still visible, then longer).
-PERIODS = np.logspace(np.log10(30.0), np.log10(1000.0), num=D_SIN)
+PERIODS = np.logspace(np.log10(10), np.log10(10000.0), num=D_SIN)
 WAVELENGTHS = PERIODS / (2 * np.pi)
 
 def _phase_for_value(y, wl, x0=600.0):
@@ -19,7 +19,7 @@ def _phase_for_value(y, wl, x0=600.0):
 
 PHASES = np.array([_phase_for_value(y, wl) for y, wl in zip(TARGET_VALUES_600, WAVELENGTHS)])
 
-WAVE_COLORS = [RED, ORANGE, YELLOW, GREEN, BLUE]
+WAVE_COLORS = [PURPLE, RED, ORANGE, YELLOW, GREEN, BLUE]
 WAVE_X_RANGE = [0, 1000, 100]
 
 
@@ -93,29 +93,62 @@ class SinusoidalPE(Scene):
             axis_config={"include_tip": False},
         ).move_to(axes_pos)
 
+        x_labels = VGroup(
+            MathTex("0", font_size=24).next_to(wave_ax.c2p(0, 0), DOWN),
+            MathTex("1000", font_size=24).next_to(wave_ax.c2p(1000, 0), DOWN),
+        )
+        y_labels = VGroup(
+            MathTex("-1", font_size=24).next_to(wave_ax.c2p(0, -1), LEFT),
+            MathTex("1", font_size=24).next_to(wave_ax.c2p(0, 1), LEFT),
+        )
+
         self.play(
             FadeOut(spectrum_ax), FadeOut(int_lbl), FadeOut(mz_lbl),
             FadeOut(dot_600), FadeOut(lbl_600),
             Create(wave_ax),
+            Write(x_labels), Write(y_labels),
         )
         wl0 = WAVELENGTHS[0]
         y0 = np.sin(600.0 / wl0 + PHASES[0])
 
         # Build formula from stable parts so only the λ index updates.
+        def _frac_mz(idx):
+            tex = rf"\frac{{\mathrm{{m/z}}}}{{\lambda_{{{idx}}}}}"
+            return MathTex(
+                tex,
+                font_size=28,
+                substrings_to_isolate=[rf"\lambda_{{{idx}}}"],
+            )
+
+        def _frac_600(idx):
+            tex = rf"\frac{{600}}{{\lambda_{{{idx}}}}}"
+            return MathTex(
+                tex,
+                font_size=28,
+                substrings_to_isolate=[rf"\lambda_{{{idx}}}"],
+            )
+
         left_open = MathTex(r"\sin\!\left(", font_size=28)
-        left_frac = MathTex(r"\frac{\mathrm{m/z}}{\lambda_{0}}", font_size=28)
+        left_frac = _frac_mz(0)
         left_close = MathTex(r"\right)", font_size=28)
         arrow = MathTex(r"\Rightarrow", font_size=28)
         right_open = MathTex(r"\sin\!\left(", font_size=28)
-        right_frac = MathTex(r"\frac{600}{\lambda_{0}}", font_size=28)
+        right_frac = _frac_600(0)
         right_close = MathTex(r"\right)", font_size=28)
         equals = MathTex(r"=", font_size=28)
-        y_num = DecimalNumber(
-            y0,
-            num_decimal_places=3,
-            include_sign=True,
-            font_size=28,
-        )
+        y_tracker = ValueTracker(0.0)
+
+        def _bound_decimal(font_size):
+            dn = DecimalNumber(
+                0.0,
+                num_decimal_places=3,
+                include_sign=True,
+                font_size=font_size,
+            )
+            dn.add_updater(lambda m: m.set_value(y_tracker.get_value()))
+            return dn
+
+        y_num = _bound_decimal(32)
         formula_group = VGroup(
             left_open, left_frac, left_close,
             arrow,
@@ -131,12 +164,7 @@ class SinusoidalPE(Scene):
         y_vals     = []
 
         mz_part = Text("(600, ", font_size=24)
-        val_part = DecimalNumber(
-            0.0,
-            num_decimal_places=3,
-            include_sign=True,
-            font_size=24,
-        )
+        val_part = _bound_decimal(28)
         rparen = Text(")", font_size=24)
         point_group = VGroup(mz_part, val_part, rparen).arrange(RIGHT, buff=0.05)
         point_group.next_to(formula_group, DOWN, buff=0.3, aligned_edge=LEFT)
@@ -165,34 +193,38 @@ class SinusoidalPE(Scene):
             )
 
             y_val = np.sin(600.0 / wl + PHASES[idx])
-            y_vals.append(y_val)
 
             dot = Dot(wave_ax.c2p(600, y_val), color=color, radius=0.06)
 
-            display_y    = 0.0 if abs(y_val) < 1e-4 else y_val
+            display_y    = TARGET_VALUES_600[idx]
+            y_vals.append(display_y)
             display_idx = idx
-            new_left_frac = MathTex(
-                rf"\frac{{\mathrm{{m/z}}}}{{\lambda_{{{display_idx}}}}}",
-                font_size=28,
-            ).move_to(left_frac)
-            new_right_frac = MathTex(
-                rf"\frac{{600}}{{\lambda_{{{display_idx}}}}}",
-                font_size=28,
-            ).move_to(right_frac)
+            new_left_frac = _frac_mz(display_idx).move_to(left_frac)
+            new_right_frac = _frac_600(display_idx).move_to(right_frac)
+
+            left_lambda = new_left_frac.get_parts_by_tex(
+                rf"\lambda_{{{display_idx}}}"
+            )[0]
+            right_lambda = new_right_frac.get_parts_by_tex(
+                rf"\lambda_{{{display_idx}}}"
+            )[0]
+            left_lambda.set_color(color)
+            right_lambda.set_color(color)
+
 
             highlight_circle = Circle(
                 radius=0.15, color=YELLOW, stroke_width=3,
             ).move_to(dot.get_center())
+
+            y_num.set_color(color)
+            val_part.set_color(color)
 
             self.play(
                 Create(wave),
                 FadeIn(dot),
                 FadeTransform(left_frac, new_left_frac),
                 FadeTransform(right_frac, new_right_frac),
-                ChangeDecimalToValue(y_num, display_y),
-                ChangeDecimalToValue(val_part, display_y),
-                y_num.animate.set_color(color),
-                val_part.animate.set_color(color),
+                y_tracker.animate.set_value(display_y),
                 Succession(
                     FadeIn(highlight_circle,  scale=0.5),
                     FadeOut(highlight_circle, scale=1.5),
