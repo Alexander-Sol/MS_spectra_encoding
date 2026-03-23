@@ -100,26 +100,48 @@ class SinusoidalPE(Scene):
         )
         wl0 = WAVELENGTHS[0]
         y0 = np.sin(600.0 / wl0 + PHASES[0])
-        formula_str = (
-            rf"\sin\!\left(\frac{{\mathrm{{m/z}}}}{{\lambda_{{0}}}}\right)"
-            rf"\Rightarrow \sin\!\left(\frac{{600}}{{\lambda_{{0}}}}\right)"
-            rf" = {y0:.3f}"
-        )
-        formula_lbl = MathTex(
-            formula_str,
+
+        # Build formula from stable parts so only the λ index updates.
+        left_open = MathTex(r"\sin\!\left(", font_size=28)
+        left_frac = MathTex(r"\frac{\mathrm{m/z}}{\lambda_{0}}", font_size=28)
+        left_close = MathTex(r"\right)", font_size=28)
+        arrow = MathTex(r"\Rightarrow", font_size=28)
+        right_open = MathTex(r"\sin\!\left(", font_size=28)
+        right_frac = MathTex(r"\frac{600}{\lambda_{0}}", font_size=28)
+        right_close = MathTex(r"\right)", font_size=28)
+        equals = MathTex(r"=", font_size=28)
+        y_num = DecimalNumber(
+            y0,
+            num_decimal_places=3,
+            include_sign=True,
             font_size=28,
-        ).next_to(question, DOWN, buff=0.4)
-        self.play(FadeIn(formula_lbl))
+        )
+        formula_group = VGroup(
+            left_open, left_frac, left_close,
+            arrow,
+            right_open, right_frac, right_close,
+            equals, y_num,
+        ).arrange(RIGHT, buff=0.1)
+        formula_group.next_to(question, DOWN, buff=0.4, aligned_edge=LEFT)
+        self.play(FadeIn(formula_group))
 
         # ── Draw waves: fastest → slowest ──────────────────────────
         zoom_waves = VGroup()
         zoom_dots  = VGroup()
         y_vals     = []
 
-        mz_part  = Text("(600, ", font_size=24).next_to(formula_lbl, DOWN, buff=0.3)
-        val_part = Text("0.000)", font_size=24).next_to(mz_part, RIGHT, buff=0.1)
+        mz_part = Text("(600, ", font_size=24)
+        val_part = DecimalNumber(
+            0.0,
+            num_decimal_places=3,
+            include_sign=True,
+            font_size=24,
+        )
+        rparen = Text(")", font_size=24)
+        point_group = VGroup(mz_part, val_part, rparen).arrange(RIGHT, buff=0.05)
+        point_group.next_to(formula_group, DOWN, buff=0.3, aligned_edge=LEFT)
 
-        self.play(FadeIn(mz_part), FadeIn(val_part))
+        self.play(FadeIn(point_group))
 
         for idx in range(D_SIN):
             color = WAVE_COLORS[idx]
@@ -149,19 +171,14 @@ class SinusoidalPE(Scene):
 
             display_y    = 0.0 if abs(y_val) < 1e-4 else y_val
             display_idx = idx
-            new_formula_str = (
-                rf"\sin\!\left(\frac{{\mathrm{{m/z}}}}{{\lambda_{{{display_idx}}}}}\right)"
-                rf"\Rightarrow \sin\!\left(\frac{{600}}{{\lambda_{{{display_idx}}}}}\right)"
-                rf" = {display_y:.3f}"
-            )
-            new_formula_lbl = MathTex(
-                new_formula_str,
+            new_left_frac = MathTex(
+                rf"\frac{{\mathrm{{m/z}}}}{{\lambda_{{{display_idx}}}}}",
                 font_size=28,
-            ).next_to(question, DOWN, buff=0.4)
-            new_formula_lbl.align_to(formula_lbl, LEFT)
-            new_val_part = Text(
-                f"{display_y:.3f})", font_size=24, color=color,
-            ).next_to(mz_part, RIGHT, buff=0.1)
+            ).move_to(left_frac)
+            new_right_frac = MathTex(
+                rf"\frac{{600}}{{\lambda_{{{display_idx}}}}}",
+                font_size=28,
+            ).move_to(right_frac)
 
             highlight_circle = Circle(
                 radius=0.15, color=YELLOW, stroke_width=3,
@@ -170,19 +187,24 @@ class SinusoidalPE(Scene):
             self.play(
                 Create(wave),
                 FadeIn(dot),
-                TransformMatchingTex(formula_lbl, new_formula_lbl),
-                FadeOut(val_part,     shift=UP * 0.2),
-                FadeIn(new_val_part,  shift=UP * 0.2),
+                FadeTransform(left_frac, new_left_frac),
+                FadeTransform(right_frac, new_right_frac),
+                ChangeDecimalToValue(y_num, display_y),
+                ChangeDecimalToValue(val_part, display_y),
+                y_num.animate.set_color(color),
+                val_part.animate.set_color(color),
                 Succession(
                     FadeIn(highlight_circle,  scale=0.5),
                     FadeOut(highlight_circle, scale=1.5),
                 ),
-                Flash(new_val_part, color=color,  line_length=0.1, flash_radius=0.3),
+                Flash(val_part,     color=color,  line_length=0.1, flash_radius=0.3),
                 Flash(dot,          color=YELLOW, line_length=0.1, flash_radius=0.2),
                 run_time=2.0,
             )
-            val_part = new_val_part
-            formula_lbl = new_formula_lbl
+            formula_group.remove(left_frac, right_frac)
+            left_frac = new_left_frac
+            right_frac = new_right_frac
+            formula_group.add(left_frac, right_frac)
             zoom_waves.add(wave)
             zoom_dots.add(dot)
             self.wait(0.2)
@@ -205,8 +227,8 @@ class SinusoidalPE(Scene):
 
         self.play(
             FadeOut(zoom_waves), FadeOut(zoom_dots),
-            FadeOut(formula_lbl),
-            FadeOut(mz_part), FadeOut(val_part),
+            FadeOut(formula_group),
+            FadeOut(point_group),
             FadeOut(wave_ax),
             FadeOut(question),
             FadeOut(bar_600)
