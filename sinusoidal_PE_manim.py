@@ -2,38 +2,32 @@ from manim import *
 import numpy as np
 
 # ── Constants ─────────────────────────────────────────────────────────
-D_SIN = 6
-LAMBDA_MIN = 0.001
-LAMBDA_MAX = 10000
+# Target values at m/z = 600 from the "Low-Dimensional Numerical Example"
+# in 03_Casanovo.ipynb (λ1..λ5). We build visually nice waves that hit these
+# exact values at x=600, even if the periods are "fake."
+TARGET_VALUES_600 = np.array([0.424, -0.392, -0.781, -0.045, 0.368])
+D_SIN = len(TARGET_VALUES_600)
 
-# Casanovo wavelength formula (matches make_wavelength_list in 03_Casanovo.ipynb):
-#   λ_i = (λ_min / 2π) × (λ_max / λ_min)^(i / (d_sin - 1))
-#
-# For d_sin = 6, λ_min = 0.001, λ_max = 10000:
-#   λ₀ ≈ 0.000159  λ₁ ≈ 0.003998  λ₂ ≈ 0.100420
-#   λ₃ ≈ 2.522436  λ₄ ≈ 63.360724  λ₅ ≈ 1591.549431
-#
-# sin(600 / λ_i) for i=1..5:
-#   [0.424, -0.392, -0.781, -0.045, 0.368]
-# (λ₀ gives ≈ 0.000 since 600/λ₀ = 1,200,000π)
+# Choose visually reasonable periods (shortest still visible, then longer).
+PERIODS = np.logspace(np.log10(30.0), np.log10(1000.0), num=D_SIN)
+WAVELENGTHS = PERIODS / (2 * np.pi)
 
-WAVELENGTHS = np.array([
-    (LAMBDA_MIN / (2 * np.pi)) * (LAMBDA_MAX / LAMBDA_MIN) ** (i / (D_SIN - 1))
-    for i in range(D_SIN)
-])
+def _phase_for_value(y, wl, x0=600.0):
+    base = np.arcsin(np.clip(y, -1.0, 1.0))
+    phase = base - (x0 / wl)
+    return (phase + np.pi) % (2 * np.pi) - np.pi
 
-WAVE_COLORS = [RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE]
+PHASES = np.array([_phase_for_value(y, wl) for y, wl in zip(TARGET_VALUES_600, WAVELENGTHS)])
 
-BASE_X_RANGE = [0, 1000, 100]
-BASE_WINDOW = BASE_X_RANGE[1] - BASE_X_RANGE[0]
-WINDOW_PERIODS = 4
+WAVE_COLORS = [RED, ORANGE, YELLOW, GREEN, BLUE]
+WAVE_X_RANGE = [0, 1000, 100]
 
 
 def sin_enc(wi, x):
-    return np.sin(x / WAVELENGTHS[wi])
+    return np.sin(x / WAVELENGTHS[wi] + PHASES[wi])
 
 
-class SinusoidalPE(MovingCameraScene):
+class SinusoidalPE(Scene):
     def construct(self):
         self._scene_1()
 
@@ -89,11 +83,11 @@ class SinusoidalPE(MovingCameraScene):
         self.play(Write(question), FadeOut(others, run_time=1.5))
         self.wait(1)
 
-        # ── Transition: spectrum → zoomed-in wave axes ───────────────
+        # ── Transition: spectrum → wave axes ─────────────────────────
         axes_pos = spectrum_ax.get_center()
 
         wave_ax = Axes(
-            x_range=BASE_X_RANGE,
+            x_range=WAVE_X_RANGE,
             y_range=[-1.5, 1.5, 1],
             x_length=10, y_length=3,
             axis_config={"include_tip": False},
@@ -101,107 +95,70 @@ class SinusoidalPE(MovingCameraScene):
 
         self.play(
             FadeOut(spectrum_ax), FadeOut(int_lbl), FadeOut(mz_lbl),
-            FadeOut(dot_600), FadeOut(lbl_600), FadeOut(bar_600),
+            FadeOut(dot_600), FadeOut(lbl_600),
             Create(wave_ax),
         )
-        self.camera.frame.set_width(wave_ax.get_width())
-        self.camera.frame.move_to(wave_ax.get_center())
-
+        wl0 = WAVELENGTHS[0]
+        y0 = np.sin(600.0 / wl0 + PHASES[0])
+        formula_str = (
+            rf"\sin\!\left(\frac{{\mathrm{{m/z}}}}{{\lambda_{{0}}}}\right)"
+            rf"\Rightarrow \sin\!\left(\frac{{600}}{{\lambda_{{0}}}}\right)"
+            rf" = {y0:.3f}"
+        )
         formula_lbl = MathTex(
-            r"\sin\!\left(\frac{\mathrm{m/z}}{\lambda_i}\right)",
-            font_size=32,
+            formula_str,
+            font_size=28,
         ).next_to(question, DOWN, buff=0.4)
         self.play(FadeIn(formula_lbl))
 
-        # ── Draw waves: fastest → slowest, zooming via camera ───────
+        # ── Draw waves: fastest → slowest ──────────────────────────
         zoom_waves = VGroup()
         zoom_dots  = VGroup()
         y_vals     = []
 
-        lambda_lbl = MathTex(
-            rf"\lambda_{{0}}",
-            font_size=30,
-        ).next_to(formula_lbl, RIGHT, buff=1.5)
-
         mz_part  = Text("(600, ", font_size=24).next_to(formula_lbl, DOWN, buff=0.3)
         val_part = Text("0.000)", font_size=24).next_to(mz_part, RIGHT, buff=0.1)
 
-        self.play(FadeIn(lambda_lbl), FadeIn(mz_part), FadeIn(val_part))
-
-        def _window_for_wavelength(wl, center_x=600.0):
-            period = 2 * np.pi * wl
-            window = WINDOW_PERIODS * period
-            if window >= BASE_WINDOW:
-                return BASE_X_RANGE[0], BASE_X_RANGE[1]
-            left = center_x - window / 2
-            right = center_x + window / 2
-            if left < BASE_X_RANGE[0]:
-                right += BASE_X_RANGE[0] - left
-                left = BASE_X_RANGE[0]
-            if right > BASE_X_RANGE[1]:
-                left -= right - BASE_X_RANGE[1]
-                right = BASE_X_RANGE[1]
-            return left, right
-
-        def _step_for_window(wl, left, right):
-            period = 2 * np.pi * wl
-            window = right - left
-            step = min(window / 600, period / 80)
-            step = min(step, window / 300)
-            step = max(step, window / 5000)
-            return step
-
-        base_width = wave_ax.get_width()
-        base_center = wave_ax.get_center()
-        focus_center = wave_ax.c2p(600, 0)
+        self.play(FadeIn(mz_part), FadeIn(val_part))
 
         for idx in range(D_SIN):
             color = WAVE_COLORS[idx]
             wl    = WAVELENGTHS[idx]
-
-            left, right = _window_for_wavelength(wl)
-            window = right - left
-            target_width = base_width * (window / BASE_WINDOW)
-            target_center = base_center if window >= BASE_WINDOW else focus_center
-
-            self.play(
-                FadeOut(zoom_waves), FadeOut(zoom_dots),
-                self.camera.frame.animate.set_width(target_width).move_to(target_center),
-                run_time=1.5,
-            )
+            self.play(FadeOut(zoom_waves), FadeOut(zoom_dots), run_time=0.6)
             zoom_waves = VGroup()
             zoom_dots  = VGroup()
 
             # ── Plot the wave ──
-            step = _step_for_window(wl, left, right)
+            period = 2 * np.pi * wl
+            full_window = WAVE_X_RANGE[1] - WAVE_X_RANGE[0]
+            step = min(full_window / 800, period / 80)
+            step = max(step, full_window / 5000)
 
             wave = wave_ax.plot(
-                lambda x, _wl=wl: np.sin(x / _wl),
-                x_range=[left, right, step],
+                lambda x, _wl=wl, _ph=PHASES[idx]: np.sin(x / _wl + _ph),
+                x_range=[WAVE_X_RANGE[0], WAVE_X_RANGE[1], step],
                 color=color,
                 stroke_width=2,
                 use_smoothing=False,
             )
 
-            y_val = np.sin(600.0 / wl)
+            y_val = np.sin(600.0 / wl + PHASES[idx])
             y_vals.append(y_val)
 
             dot = Dot(wave_ax.c2p(600, y_val), color=color, radius=0.06)
 
-            # Format wavelength for display
-            if wl < 0.01:
-                wl_str = f"{wl:.6f}"
-            elif wl < 1:
-                wl_str = f"{wl:.4f}"
-            else:
-                wl_str = f"{wl:.1f}"
-
-            new_lambda_lbl = MathTex(
-                rf"\lambda_{{{idx}}} = {wl_str}",
-                font_size=28,
-            ).next_to(formula_lbl, RIGHT, buff=1.5)
-
             display_y    = 0.0 if abs(y_val) < 1e-4 else y_val
+            display_idx = idx
+            new_formula_str = (
+                rf"\sin\!\left(\frac{{\mathrm{{m/z}}}}{{\lambda_{{{display_idx}}}}}\right)"
+                rf"\Rightarrow \sin\!\left(\frac{{600}}{{\lambda_{{{display_idx}}}}}\right)"
+                rf" = {display_y:.3f}"
+            )
+            new_formula_lbl = MathTex(
+                new_formula_str,
+                font_size=28,
+            ).next_to(question, DOWN, buff=0.4)
+            new_formula_lbl.align_to(formula_lbl, LEFT)
             new_val_part = Text(
                 f"{display_y:.3f})", font_size=24, color=color,
             ).next_to(mz_part, RIGHT, buff=0.1)
@@ -213,7 +170,7 @@ class SinusoidalPE(MovingCameraScene):
             self.play(
                 Create(wave),
                 FadeIn(dot),
-                Transform(lambda_lbl, new_lambda_lbl),
+                TransformMatchingTex(formula_lbl, new_formula_lbl),
                 FadeOut(val_part,     shift=UP * 0.2),
                 FadeIn(new_val_part,  shift=UP * 0.2),
                 Succession(
@@ -225,6 +182,7 @@ class SinusoidalPE(MovingCameraScene):
                 run_time=2.0,
             )
             val_part = new_val_part
+            formula_lbl = new_formula_lbl
             zoom_waves.add(wave)
             zoom_dots.add(dot)
             self.wait(0.2)
@@ -247,9 +205,11 @@ class SinusoidalPE(MovingCameraScene):
 
         self.play(
             FadeOut(zoom_waves), FadeOut(zoom_dots),
-            FadeOut(lambda_lbl), FadeOut(mz_part), FadeOut(val_part),
-            FadeOut(formula_lbl), FadeOut(wave_ax),
+            FadeOut(formula_lbl),
+            FadeOut(mz_part), FadeOut(val_part),
+            FadeOut(wave_ax),
             FadeOut(question),
+            FadeOut(bar_600)
         )
         self.play(Write(vec))
         self.play(FadeIn(conclusion))
