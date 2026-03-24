@@ -801,8 +801,11 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
         ]
         for i in range(len(X2)):
             if scan_numbers[i] in SHHWGYGK_spectra: 
+                if scan_numbers[i] == 4062 or scan_numbers[i] == 3220:
+                    ax.text(X2[i, 0], X2[i, 1], str(scan_numbers[i]),
+                    fontsize=10, alpha=0.8, color='red')
                 ax.text(X2[i, 0], X2[i, 1], str(scan_numbers[i]),
-                fontsize=6, alpha=0.8)
+                fontsize=8, alpha=0.8, color='black')
         ax.set_title(title, fontsize=12)
         ax.set_xlabel('Dim1')
         ax.set_ylabel('Dim2')
