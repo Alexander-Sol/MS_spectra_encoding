@@ -424,23 +424,46 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
 
 
 # @title Proving Similarity preservation empirically 
-def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=300):
+def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.04, hash_buckets = 10000, max_spectra=300, spectra_idx_to_compare=None, k_means=None):
     import mmh3
+    import re
       # Demonstrate similarity preservation between original sparse maps and hashed vectors
       # Let's get multiple spectra and compare their similarities
 
+    def get_scan_number_from_spectrum_id(spectrum_id):
+        """Extract scan number from spectrum ID string."""    
+        match = re.search(r'scan=(\d+)', spectrum_id)
+        if match:
+            return int(match.group(1))
+        else:
+            raise ValueError(f"Could not extract scan number from spectrum ID: {spectrum_id}")
+
     # Get spectra (stop early if max_spectra provided)
-    spectra_to_compare = get_all_MS2_objects(mzml_path, max_spectra=max_spectra)
-    if max_spectra and len(spectra_to_compare) > max_spectra:
+    spectra_to_compare = None
+    if spectra_idx_to_compare is not None:
+        spectra_to_compare = get_all_MS2_objects(mzml_path)
+        scan_num = lambda s: get_scan_number_from_spectrum_id(s.identifier)
+        spectra_to_compare = [s for s in spectra_to_compare if scan_num(s) in spectra_idx_to_compare]
+    elif max_spectra is not None:
+        spectra_to_compare = get_all_MS2_objects(mzml_path, max_spectra=max_spectra)
         spectra_to_compare = spectra_to_compare[:max_spectra]
+    else:
+        spectra_to_compare = get_all_MS2_objects(mzml_path)
+
+    # make sure all the spectra we loaded have peaks!
+    n_spectra_before = len(spectra_to_compare)
+    spectra_to_compare = [s for s in spectra_to_compare if len(s.intensity) > 0]
     n_spectra = len(spectra_to_compare)
+    scan_numbers = [get_scan_number_from_spectrum_id(s.identifier) for s in spectra_to_compare]
+
+    print(f"Comparing {n_spectra} spectra (out of {n_spectra_before} loaded)")
 
     # Convert each spectrum to sparse map and hash vector representations
     sparse_maps = []
     hash_vectors = []
     
-    WIDTH_OF_BIN = 0.04
-    hash_buckets = 1000  # Increased from 800 to reduce collisions with ~100k dimensional space
+    WIDTH_OF_BIN = bin_width
+    hash_buckets = hash_buckets  # Increased from 800 to reduce collisions with ~100k dimensional space
 
     def normalize_intensity():
         """Normalize intensities across all spectra to range [0,1]"""
@@ -497,6 +520,15 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
             hash_vec[bucket_idx] += intensity
         return hash_vec
     
+    def sparse_map_to_hash_vector_2(sparse_map, key_to_bucket, num_buckets=hash_buckets):
+        """Convert sparse map to hash vector using pre-computed key_to_bucket mapping"""
+        hash_vec = [0] * num_buckets
+        for sparse_idx, intensity in sparse_map.items():
+            bucket_idx = key_to_bucket.get(sparse_idx)
+            if bucket_idx is not None:
+                hash_vec[bucket_idx] += intensity
+        return hash_vec
+
     def cosine_similarity(vec1, vec2):
         """Calculate cosine similarity between two vectors (returns value between 0 and 1)"""
         vec1 = np.array(vec1)
@@ -527,15 +559,24 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
         # Calculate cosine similarity using the dot_product function
         return cosine_similarity(vec1, vec2)
 
+
+    sparse_map_keys = set()
     # Create representations for each spectrum
     for spec_data in spectra_to_compare:
         sparse_map = create_sparse_map(spec_data.mz, spec_data.intensity)
-        hash_vec = sparse_map_to_hash_vector(sparse_map,hash_buckets)
-        
+        sparse_map_keys |= set(sparse_map.keys())
         sparse_maps.append(sparse_map)
+    
+    # Create dictionary mapping sparse map keys to their hashed bucket indices (for analysis)
+    key_to_bucket = {}
+    for key in sparse_map_keys:
+        bucket_idx = mmh3.hash(str(key), seed=42) % hash_buckets
+        key_to_bucket[key] = bucket_idx
+     
+    # Now create hash vectors using the new mapping function that relies on pre-computed key_to_bucket
+    for sparse_map in sparse_maps:
+        hash_vec = sparse_map_to_hash_vector_2(sparse_map, key_to_bucket, hash_buckets)
         hash_vectors.append(hash_vec)
-
-
 
     Xh = np.array(hash_vectors)
 
@@ -543,6 +584,8 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     all_indices = set()
     for sm in sparse_maps:
         all_indices |= set(sm.keys())
+
+    print(f"Total unique bins across all spectra: {len(all_indices)}")
 
     max_idx = max(all_indices)
     n_bins = max_idx + 1
@@ -615,9 +658,6 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     upper_indices = np.triu_indices(n_spectra, k=1)
     sparse_upper = sparse_similarities[upper_indices]
     hash_upper = hash_similarities[upper_indices]
-
-    
-    
     
     perp = min(30, max(5, (n_spectra // 3)))
     
@@ -626,23 +666,40 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
     Xs_pca_aligned = Xs_pca[:, :min_cols]
     Xh_pca_aligned = Xh_pca[:, :min_cols]
     
-    # Run t-SNE on combined data
+    # Run UMAP on combined data
     combined_pca = np.vstack([Xs_pca_aligned, Xh_pca_aligned])
-    tsne_combined = TSNE(n_components=2, perplexity=perp, random_state=0, init='pca')
-    combined_2d = tsne_combined.fit_transform(combined_pca)
+    umap_combined = umap.UMAP(n_components=2, n_neighbors=perp, min_dist=0.1, random_state=0)
+    combined_2d = umap_combined.fit_transform(combined_pca)
+
+    # from sklearn.manifold import TSNE
+    # #  Run t-SNE on combined data
+    # combined_pca = np.vstack([Xs_pca_aligned, Xh_pca_aligned])
+    # perp = min(30, max(5, (combined_pca.shape[0] - 1) // 3))
+    # tsne = TSNE(
+    #     n_components=2,
+    #     perplexity=perp,
+    #     random_state=0,
+    #     init='pca',
+    #     learning_rate='auto'
+    # )
+    # combined_2d = tsne.fit_transform(combined_pca)
     
     # Split back into unhashed and hashed embeddings
     Xs2 = combined_2d[:n_spectra]
     Xh2 = combined_2d[n_spectra:]
     
     # Cluster on the combined 2D embedding with shared clustering
-    N_CLUSTERS = 12
+    if k_means is not None:
+        N_CLUSTERS = k_means
+    else:
+        N_CLUSTERS = 12
+
     try:
         km_combined = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(combined_2d)
     except Exception as e:
         logging.getLogger(__name__).warning('KMeans failed: %s', e)
         return
-
+    
     labels_shared = km_combined.labels_[:n_spectra]  # Use first half for both plots
 
     # Calculate centers for visualization based on actual cluster assignments in shared space
@@ -651,6 +708,11 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
                         else np.zeros(Xs2.shape[1]) for k in range(N_CLUSTERS)])
     centers_h = np.array([Xh2[labels_shared == k].mean(axis=0) if (labels_shared == k).any() 
                         else np.zeros(Xh2.shape[1]) for k in range(N_CLUSTERS)])
+    
+    # Make sure to only keep valid clusters that have points assigned to them for better visualization
+    valid_clusters = np.array([(labels_shared == k).any() for k in range(N_CLUSTERS)])
+    centers_s_valid = centers_s[valid_clusters]
+    centers_h_valid = centers_h[valid_clusters]
 
     # Detect outliers using shared clustering
     dists_s = np.linalg.norm(Xs2 - centers_s[labels_shared], axis=1)
@@ -729,14 +791,18 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, max_spectra=30
             ax.scatter(X2[out_mask,0], X2[out_mask,1], c='lightgray', 
                     s=18, alpha=0.8, label='outliers')
         ax.scatter(centers[:,0], centers[:,1], c='k', marker='x', s=60)
+        # Label points with scan numbers
+        for i in range(len(X2)): 
+            ax.text(X2[i, 0], X2[i, 1], str(scan_numbers[i]),
+            fontsize=6, alpha=0.8)
         ax.set_title(title, fontsize=12)
         ax.set_xlabel('Dim1')
         ax.set_ylabel('Dim2')
         ax.grid(alpha=0.25)
 
-    plot_with_shared_colors(axes[0], Xs2, centers_s, labels_shared, out_s,
+    plot_with_shared_colors(axes[0], Xs2, centers_s_valid, labels_shared, out_s,
                             f'Unhashed (Full Precision) - {N_CLUSTERS} clusters')
-    plot_with_shared_colors(axes[1], Xh2, centers_h, labels_shared, out_h,
+    plot_with_shared_colors(axes[1], Xh2, centers_h_valid, labels_shared, out_h,
                             f'Hashed ({hash_buckets} buckets) - Same {N_CLUSTERS} clusters')
 
     plt.tight_layout()
