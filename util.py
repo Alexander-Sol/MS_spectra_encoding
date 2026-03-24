@@ -667,6 +667,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     Xh_pca_aligned = Xh_pca[:, :min_cols]
     
     # Run UMAP on combined data
+    import umap
     combined_pca = np.vstack([Xs_pca_aligned, Xh_pca_aligned])
     umap_combined = umap.UMAP(n_components=2, n_neighbors=perp, min_dist=0.1, random_state=0)
     combined_2d = umap_combined.fit_transform(combined_pca)
@@ -792,9 +793,16 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
                     s=18, alpha=0.8, label='outliers')
         ax.scatter(centers[:,0], centers[:,1], c='k', marker='x', s=60)
         # Label points with scan numbers
-        for i in range(len(X2)): 
-            ax.text(X2[i, 0], X2[i, 1], str(scan_numbers[i]),
-            fontsize=6, alpha=0.8)
+        # Only labelling SHHWGYGK scans for debugging purposes
+        SHHWGYGK_spectra=[
+            1577, 2940, 2674, 2921, 2324, 2190, 1173, 2469, 1879, 3,
+            1729, 930, 1438, 1049, 808, 1312, 685, 4059, 3220, 3246,
+            9316, 4091, 413, 3922, 2052, 550, 282, 141, 4062
+        ]
+        for i in range(len(X2)):
+            if scan_numbers[i] in SHHWGYGK_spectra: 
+                ax.text(X2[i, 0], X2[i, 1], str(scan_numbers[i]),
+                fontsize=6, alpha=0.8)
         ax.set_title(title, fontsize=12)
         ax.set_xlabel('Dim1')
         ax.set_ylabel('Dim2')
