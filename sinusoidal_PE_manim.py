@@ -5,7 +5,7 @@ import numpy as np
 # Target values at m/z = 600 from the "Low-Dimensional Numerical Example"
 # in 03_Casanovo.ipynb (λ0..λ5). We build visually nice waves that hit these
 # exact values at x=600, even if the periods are "fake."
-TARGET_VALUES_600 = np.array([-0.000, 0.364, -0.782, -0.973, -0.059, -0.588])
+TARGET_VALUES_600 = np.array([0.000, 0.364, -0.782, -0.973, -0.059, -0.588])
 D_SIN = len(TARGET_VALUES_600)
 
 # Choose visually reasonable periods (shortest still visible, then longer).
@@ -94,7 +94,7 @@ class SinusoidalPE(Scene):
         ).move_to(axes_pos)
 
         x_labels = VGroup(
-            MathTex("0", font_size=24).next_to(wave_ax.c2p(0, 0), DOWN),
+            MathTex("0", font_size=24).next_to(wave_ax.c2p(0, 0), DOWN + LEFT, buff=0.1),
             MathTex("1000", font_size=24).next_to(wave_ax.c2p(1000, 0), DOWN),
         )
         y_labels = VGroup(
@@ -111,6 +111,22 @@ class SinusoidalPE(Scene):
         wl0 = WAVELENGTHS[0]
         y0 = np.sin(600.0 / wl0 + PHASES[0])
 
+        vector_group = Matrix(
+            [[f"{value:+.3f}"] for value in TARGET_VALUES_600],
+            left_bracket="[",
+            right_bracket="]",
+            h_buff=0.8,
+            v_buff=0.8,
+        )
+        vector_group.scale(0.6)
+        vector_group.next_to(question, DOWN + RIGHT, buff=0.4)
+        vector_entries = vector_group.get_entries()
+        for idx, entry in enumerate(vector_entries):
+            entry.set_opacity(0)
+            entry.set_color(WAVE_COLORS[idx])
+
+        self.play(FadeIn(vector_group), run_time=0.8)
+
         # Build formula from stable parts so only the λ index updates.
         def _frac_mz(idx):
             tex = rf"\frac{{\mathrm{{m/z}}}}{{\lambda_{{{idx}}}}}"
@@ -121,18 +137,19 @@ class SinusoidalPE(Scene):
             )
 
         def _frac_600(idx):
-            tex = rf"\frac{{600}}{{\lambda_{{{idx}}}}}"
+            val = [0.000, 0.003, 0.040, 0.634, 10.042, 159.155][idx]
+            tex = rf"\frac{{600}}{{{val:.3f}}}"
             return MathTex(
                 tex,
                 font_size=28,
-                substrings_to_isolate=[rf"\lambda_{{{idx}}}"],
+                substrings_to_isolate=[rf"{val:.3f}"],
             )
 
-        left_open = MathTex(r"\sin\!\left(", font_size=28)
+        left_open = MathTex(r"\sin\left(", font_size=28)
         left_frac = _frac_mz(0)
         left_close = MathTex(r"\right)", font_size=28)
         arrow = MathTex(r"\Rightarrow", font_size=28)
-        right_open = MathTex(r"\sin\!\left(", font_size=28)
+        right_open = MathTex(r"\sin\left(", font_size=28)
         right_frac = _frac_600(0)
         right_close = MathTex(r"\right)", font_size=28)
         equals = MathTex(r"=", font_size=28)
@@ -141,14 +158,14 @@ class SinusoidalPE(Scene):
         def _bound_decimal(font_size):
             dn = DecimalNumber(
                 0.0,
-                num_decimal_places=3,
                 include_sign=True,
+                num_decimal_places=3,
                 font_size=font_size,
             )
             dn.add_updater(lambda m: m.set_value(y_tracker.get_value()))
             return dn
 
-        y_num = _bound_decimal(32)
+        y_num = _bound_decimal(34)
         formula_group = VGroup(
             left_open, left_frac, left_close,
             arrow,
@@ -164,10 +181,10 @@ class SinusoidalPE(Scene):
         y_vals     = []
 
         mz_part = Text("(600, ", font_size=24)
-        val_part = _bound_decimal(28)
+        val_part = _bound_decimal(34)
         rparen = Text(")", font_size=24)
         point_group = VGroup(mz_part, val_part, rparen).arrange(RIGHT, buff=0.05)
-        point_group.next_to(formula_group, DOWN, buff=0.3, aligned_edge=LEFT)
+        point_group.next_to(formula_group, DOWN * 2.5 + RIGHT * 5, buff=0.3, aligned_edge=LEFT)
 
         self.play(FadeIn(point_group))
 
@@ -205,16 +222,13 @@ class SinusoidalPE(Scene):
             left_lambda = new_left_frac.get_parts_by_tex(
                 rf"\lambda_{{{display_idx}}}"
             )[0]
+            val = [0.000, 0.003, 0.040, 0.634, 10.042, 159.155][display_idx]
             right_lambda = new_right_frac.get_parts_by_tex(
-                rf"\lambda_{{{display_idx}}}"
+                rf"{val:.3f}"
             )[0]
             left_lambda.set_color(color)
             right_lambda.set_color(color)
 
-
-            highlight_circle = Circle(
-                radius=0.15, color=YELLOW, stroke_width=3,
-            ).move_to(dot.get_center())
 
             y_num.set_color(color)
             val_part.set_color(color)
@@ -225,14 +239,13 @@ class SinusoidalPE(Scene):
                 FadeTransform(left_frac, new_left_frac),
                 FadeTransform(right_frac, new_right_frac),
                 y_tracker.animate.set_value(display_y),
-                Succession(
-                    FadeIn(highlight_circle,  scale=0.5),
-                    FadeOut(highlight_circle, scale=1.5),
-                ),
-                Flash(val_part,     color=color,  line_length=0.1, flash_radius=0.3),
-                Flash(dot,          color=YELLOW, line_length=0.1, flash_radius=0.2),
+                # Flash(val_part,     color=color,  line_length=0.1, flash_radius=0.3),
+                Flash(dot, color=YELLOW, line_length=0.1, flash_radius=0.2),
                 run_time=2.0,
             )
+
+            self.play(vector_entries[idx].animate.set_opacity(1), run_time=0.35)
+
             formula_group.remove(left_frac, right_frac)
             left_frac = new_left_frac
             right_frac = new_right_frac
@@ -243,19 +256,16 @@ class SinusoidalPE(Scene):
 
         self.wait(2)
 
-        # ── Final: collapse to vector form ────────────────────────────
-        values_str = " \\\\ ".join(
-            f"{0.0 if abs(y) < 1e-4 else y:.3f}" for y in y_vals
+        self.play(
+            *[entry.animate.set_opacity(1) for entry in vector_entries],
+            run_time=0.8,
         )
-        vec = MathTex(
-            r"\mathbf{p}(600) = \begin{bmatrix}" + values_str + r"\end{bmatrix}",
-            font_size=32,
-        ).move_to(wave_ax.get_center())
 
+        # ── Final: collapse to vector form ────────────────────────────
         conclusion = Text(
             "Together, these values form the positional encoding vector.",
             font_size=26,
-        ).next_to(vec, DOWN, buff=0.4)
+        )
 
         self.play(
             FadeOut(zoom_waves), FadeOut(zoom_dots),
@@ -263,8 +273,9 @@ class SinusoidalPE(Scene):
             FadeOut(point_group),
             FadeOut(wave_ax),
             FadeOut(question),
-            FadeOut(bar_600)
+            FadeOut(bar_600),
+            FadeOut(x_labels), FadeOut(y_labels),
         )
-        self.play(Write(vec))
-        self.play(FadeIn(conclusion))
+        self.play(vector_group.animate.move_to(wave_ax.get_center()), run_time=1.0)
+        self.play(FadeIn(conclusion.next_to(vector_group, DOWN, buff=0.4)))
         self.wait(2)
