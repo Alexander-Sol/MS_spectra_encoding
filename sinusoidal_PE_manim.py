@@ -5,7 +5,9 @@ import numpy as np
 # Target values at m/z = 600 from the "Low-Dimensional Numerical Example"
 # in 03_Casanovo.ipynb (λ0..λ5). We build visually nice waves that hit these
 # exact values at x=600, even if the periods are "fake."
-TARGET_VALUES_600 = np.array([0.000, 0.364, -0.782, -0.973, -0.059, -0.588])
+
+# [\approx 0,\; 0.42445,\; -0.39186,\; -0.78066,\; -0.04480,\; 0.36812]$$
+TARGET_VALUES_600 = np.array([0.000, 0.424, -0.392, -0.781, -0.045, 0.368])
 D_SIN = len(TARGET_VALUES_600)
 
 # Choose visually reasonable periods (shortest still visible, then longer).
@@ -137,7 +139,15 @@ class SinusoidalPE(Scene):
             )
 
         def _frac_600(idx):
-            val = [0.000, 0.003, 0.040, 0.634, 10.042, 159.155][idx]
+            
+                # \lambda_0 &= \frac{0.001}{2\pi} \times (10^7)^{0/5} = \frac{0.001}{2\pi} \times 1 &&= 0.00016 \\
+                # \lambda_1 &= \frac{0.001}{2\pi} \times (10^7)^{1/5} = \frac{0.001}{2\pi} \times 25.11886 &&= 0.00400 \\
+                # \lambda_2 &= \frac{0.001}{2\pi} \times (10^7)^{2/5} = \frac{0.001}{2\pi} \times 630.95734 &&= 0.10042 \\
+                # \lambda_3 &= \frac{0.001}{2\pi} \times (10^7)^{3/5} = \frac{0.001}{2\pi} \times 15848.93192 &&= 2.52244 \\
+                # \lambda_4 &= \frac{0.001}{2\pi} \times (10^7)^{4/5} = \frac{0.001}{2\pi} \times 398107.17055 &&= 63.36072 \\
+                # \lambda_5 &= \frac{0.001}{2\pi} \times (10^7)^{5/5} = \frac{0.001}{2\pi} \times 10000000 &&= 1591.54943
+
+            val = [0.000, 0.004, 0.100, 2.522, 63.361, 1591.549][idx]
             tex = rf"\frac{{600}}{{{val:.3f}}}"
             return MathTex(
                 tex,
@@ -218,14 +228,15 @@ class SinusoidalPE(Scene):
             display_idx = idx
             new_left_frac = _frac_mz(display_idx).move_to(left_frac)
             new_right_frac = _frac_600(display_idx).move_to(right_frac)
-
+            
             left_lambda = new_left_frac.get_parts_by_tex(
                 rf"\lambda_{{{display_idx}}}"
             )[0]
-            val = [0.000, 0.003, 0.040, 0.634, 10.042, 159.155][display_idx]
-            right_lambda = new_right_frac.get_parts_by_tex(
-                rf"{val:.3f}"
-            )[0]
+
+            val = [0.000, 0.004, 0.100, 2.522, 63.361, 1591.549][display_idx]
+            search_str = f"{val:.3f}"
+            right_lambda = new_right_frac.get_parts_by_tex(search_str)[0]
+            
             left_lambda.set_color(color)
             right_lambda.set_color(color)
 
