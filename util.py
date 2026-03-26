@@ -1,3 +1,4 @@
+from altair import X2
 import pandas as pd
 import numpy as np
 import spectrum_utils.plot as sup
@@ -792,20 +793,24 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
             ax.scatter(X2[out_mask,0], X2[out_mask,1], c='lightgray', 
                     s=18, alpha=0.8, label='outliers')
         ax.scatter(centers[:,0], centers[:,1], c='k', marker='x', s=60)
-        # Label points with scan numbers
-        # Only labelling SHHWGYGK scans for debugging purposes
+        # Label points with BASE PEPTIDES
         SHHWGYGK_spectra=[
-            1577, 2940, 2674, 2921, 2324, 2190, 1173, 2469, 1879, 3,
-            1729, 930, 1438, 1049, 808, 1312, 685, 4059, 3220, 3246,
-            9316, 4091, 413, 3922, 2052, 550, 282, 141, 4062
+            2921, 2940, 3220, 3246, 3922, 4059, 4091
+        ]
+        HNGPEHWHKDFPIANGER_Spectra= [
+            3770, 3811, 3826, 3960, 3997, 4162, 4165, 4185, 4197, 4494, 
+            4507, 4595, 4597, 4643, 4710, 4727, 4949, 4950, 4961, 4963, 5097
+        ]
+        LVQFHFHWGSSDDQGSEHTVDRK_Spectra = [
+            5211, 5225, 5231, 5241, 5248, 5286, 5465, 5996
         ]
         for i in range(len(X2)):
-            if scan_numbers[i] in SHHWGYGK_spectra: 
-                if scan_numbers[i] == 4062 or scan_numbers[i] == 3220:
-                    ax.text(X2[i, 0], X2[i, 1], str(scan_numbers[i]),
-                    fontsize=10, alpha=0.8, color='red')
-                ax.text(X2[i, 0], X2[i, 1], str(scan_numbers[i]),
-                fontsize=8, alpha=0.8, color='black')
+            if scan_numbers[i] in SHHWGYGK_spectra:
+                ax.text(X2[i, 0], X2[i, 1], 'S', fontsize=8, alpha=0.8, color='black')
+            elif scan_numbers[i] in HNGPEHWHKDFPIANGER_Spectra:
+                ax.text(X2[i, 0], X2[i, 1], 'H', fontsize=8, alpha=0.8, color='blue')
+            elif scan_numbers[i] in LVQFHFHWGSSDDQGSEHTVDRK_Spectra:
+                ax.text(X2[i, 0], X2[i, 1], 'L', fontsize=8, alpha=0.8, color='red')
         ax.set_title(title, fontsize=12)
         ax.set_xlabel('Dim1')
         ax.set_ylabel('Dim2')
