@@ -667,7 +667,6 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     Xs_pca_aligned = Xs_pca[:, :min_cols]
     Xh_pca_aligned = Xh_pca[:, :min_cols]
     
-    # Run UMAP on combined data
     import umap
     combined_pca = np.vstack([Xs_pca_aligned, Xh_pca_aligned])
     umap_combined = umap.UMAP(n_components=2, n_neighbors=perp, min_dist=0.1, random_state=0)
@@ -804,13 +803,32 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
         LVQFHFHWGSSDDQGSEHTVDRK_Spectra = [
             5211, 5225, 5231, 5241, 5248, 5286, 5465, 5996
         ]
+        QSPVDIDTK_Spectra = [
+            3551, 3819, 4068, 4127, 4293, 4293, 4366, 4477, 
+            5155, 5171, 5340, 5480
+        ]
+        RMVNNGHSFNVEYDDSQDK_Spectra = [
+            3325, 3340, 3452, 3483, 3612, 3758, 3809, 3834, 3835, 3837, 
+            3864, 3914, 3925, 3982, 3990, 3992, 4010, 4018, 4022, 4023, 
+            4086, 4217, 4262, 4510, 4686
+        ]
+        MVNNGHSFNVEYDDSQDKAVLK_Spectra = [
+            4863, 4711, 4842, 457, 4683, 5124, 4544, 4772,
+            5044, 4693, 5356, 6438, 5668, 4690
+        ]
         for i in range(len(X2)):
-            if scan_numbers[i] in SHHWGYGK_spectra:
-                ax.text(X2[i, 0], X2[i, 1], 'S', fontsize=8, alpha=0.8, color='black')
-            elif scan_numbers[i] in HNGPEHWHKDFPIANGER_Spectra:
-                ax.text(X2[i, 0], X2[i, 1], 'H', fontsize=8, alpha=0.8, color='blue')
-            elif scan_numbers[i] in LVQFHFHWGSSDDQGSEHTVDRK_Spectra:
-                ax.text(X2[i, 0], X2[i, 1], 'L', fontsize=8, alpha=0.8, color='red')
+            # if scan_numbers[i] in SHHWGYGK_spectra:
+            #     ax.text(X2[i, 0], X2[i, 1], 'S', fontsize=12, alpha=0.8, color='black')
+            if scan_numbers[i] in HNGPEHWHKDFPIANGER_Spectra:
+                ax.text(X2[i, 0], X2[i, 1], 'H', fontsize=12, alpha=0.8, color='red')
+            # elif scan_numbers[i] in LVQFHFHWGSSDDQGSEHTVDRK_Spectra:
+            #     ax.text(X2[i, 0], X2[i, 1], 'L', fontsize=12, alpha=0.8, color='red')
+            elif scan_numbers[i] in QSPVDIDTK_Spectra:
+                ax.text(X2[i, 0], X2[i, 1], 'Q', fontsize=12, alpha=0.8, color='black')
+            elif scan_numbers[i] in RMVNNGHSFNVEYDDSQDK_Spectra:
+                ax.text(X2[i, 0], X2[i, 1], 'R', fontsize=12, alpha=0.8, color='green')
+            elif scan_numbers[i] in MVNNGHSFNVEYDDSQDKAVLK_Spectra:
+                ax.text(X2[i, 0], X2[i, 1], 'M', fontsize=12, alpha=0.8, color='teal')
         ax.set_title(title, fontsize=12)
         ax.set_xlabel('Dim1')
         ax.set_ylabel('Dim2')
