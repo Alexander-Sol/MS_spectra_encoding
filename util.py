@@ -22,6 +22,8 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import RobustScaler
 from sklearn.manifold import TSNE
 
+import SpectrumWithTransformations
+
 
 
 try:
@@ -856,3 +858,49 @@ def plot_theoretical_ions(b_mz, y_mz, peptide):
         ax.text(x, h + 0.02, f"y{j}", rotation=90, ha="center", va="bottom", fontsize=8)
 
     plt.show()
+
+# This function should read in an mzml file and return an object of type SpectrumWithTransformations
+# Based off of get_MS2_object from Sam Payne lesson 4
+def get_SWT_object(
+    mzml_path: str,
+    scan_number: int,
+    full_sequence = None,
+) -> "SpectrumWithTransformations":
+    
+    index = scan_number -1 #scan_number is 1-based, index is 0-based
+    with mzml.MzML(mzml_path, use_index=True) as reader: #use_index=True allows us to avoid reading through the entire mzml file
+        selected_spectrum = reader.get_by_index(index)
+    # Test to see if we accessed the correct scan: PASSED!
+    # precursor_mz = selected_spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
+    # print(precursor_mz)
+    
+    # This finds the cooresponding values in the .mzml file to create our MS2 for a given scan (see the params)
+    spectrum_id = selected_spectrum['id']
+    retention_time = selected_spectrum['scanList']['scan'][0]['scan start time']
+    precursor_mz = selected_spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
+    precursor_charge = int(selected_spectrum['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]['charge state'])
+    mz_array = np.asarray(selected_spectrum['m/z array'])
+    intensity_array = np.asarray(selected_spectrum['intensity array'])
+    
+    swt_object = SpectrumWithTransformations.SpectrumWithTransformations(
+        identifier=spectrum_id,
+        scan_number=scan_number,
+        precursor_mz=precursor_mz,
+        precursor_charge=precursor_charge,
+        mz_array=mz_array,
+        intensity_array=intensity_array,
+        retention_time=retention_time,
+        annotation_dictionary=None,
+        binned_mz=None,
+        hashed_mz=None,
+    )
+
+    if full_sequence:
+        swt_object = swt_object.annotate_proforma(
+            proforma_str = full_sequence,
+            fragment_tol_mass = 10, # We consider two peaks (actual and theoretical) "equivalent" if they are within +/- 0.01 Th
+            fragment_tol_mode = 'ppm',
+            ion_types = 'by',
+            max_ion_charge = max(1, precursor_charge - 1)
+        )
+    return swt_object
