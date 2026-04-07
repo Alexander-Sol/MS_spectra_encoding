@@ -76,38 +76,51 @@ EXAMPLE_TARGET_WINDOW = (
 )
 EXAMPLE_TARGET_CYCLES = (1, 5, 9, 13, 17)
 
+# Fixed x-axis range for the left graph — never changes.
+X_AXIS_MIN = 300.0
+X_AXIS_MAX = 1500.0
+X_AXIS_SPAN = X_AXIS_MAX - X_AXIS_MIN  # 1200.0
+
 
 class AugmentedManim(Scene):
     def construct(self):
         np.random.seed(42)
 
-        # ── Layout constants ──────────────────────────────────────────
-        L_CX = -3.3          # left graph center-x
-        R_CX = 3.3           # right graph center-x
-        GW, GH = 5.0, 3.8   # left graph width / height
-        RW, RH = 4.0, 3.8   # right graph width / height
+        # ── Layout ────────────────────────────────────────────────────
+        GW, GH = 5.2, 3.6   # left graph (m/z × intensity)
+        RW, RH = 4.0, 3.6   # right graph (RT × intensity)
 
-        # bottom-left origins (where axis lines meet)
-        lo = np.array([L_CX - GW / 2, -GH / 2 - 0.3, 0])
-        ro = np.array([R_CX - RW / 2, -RH / 2 - 0.3, 0])
+        # Bottom-left origin of each graph (where the two axes meet).
+        # Extra vertical room for tick labels + "m/z" label below the axis.
+        lo = np.array([-6.0, -2.4, 0])   # left origin
+        ro = np.array([ 1.3, -2.4, 0])   # right origin
 
-        # ── Build left graph frame (m/z vs intensity) ─────────────────
+        # ── Left graph frame ──────────────────────────────────────────
         l_xaxis = Line(lo, lo + RIGHT * GW, stroke_width=2)
-        l_yaxis = Line(lo, lo + UP * GH, stroke_width=2)
-        l_xlabel = Text("m/z", font_size=22).next_to(l_xaxis, DOWN, buff=0.35)
+        l_yaxis = Line(lo, lo + UP * GH,    stroke_width=2)
+        l_xlabel = Text("m/z", font_size=22).next_to(l_xaxis, DOWN, buff=0.65)
         l_ylabel = (
             Text("Intensity", font_size=18)
             .rotate(PI / 2)
             .next_to(l_yaxis, LEFT, buff=0.25)
         )
-        l_frame = VGroup(l_xaxis, l_yaxis, l_xlabel, l_ylabel)
 
-        # ── Build right graph frame (RT vs intensity) ─────────────────
+        # Permanent x-axis tick marks and labels (fixed 300–1500 scale).
+        l_ticks = VGroup()
+        l_tick_labels = VGroup()
+        for mz in [300, 600, 900, 1200, 1500]:
+            x = self._mz_to_x(mz, lo, GW)
+            l_ticks.add(Line([x, lo[1], 0], [x, lo[1] - 0.12, 0], stroke_width=1.5))
+            l_tick_labels.add(
+                Text(str(mz), font_size=12).move_to([x, lo[1] - 0.32, 0])
+            )
+
+        l_frame = VGroup(l_xaxis, l_yaxis, l_xlabel, l_ylabel, l_ticks, l_tick_labels)
+
+        # ── Right graph frame ─────────────────────────────────────────
         r_xaxis = Line(ro, ro + RIGHT * RW, stroke_width=2)
-        r_yaxis = Line(ro, ro + UP * RH, stroke_width=2)
-        r_xlabel = Text("Retention Time", font_size=18).next_to(
-            r_xaxis, DOWN, buff=0.35
-        )
+        r_yaxis = Line(ro, ro + UP * RH,    stroke_width=2)
+        r_xlabel = Text("Retention Time", font_size=18).next_to(r_xaxis, DOWN, buff=0.35)
         r_ylabel = (
             Text("Intensity", font_size=18)
             .rotate(PI / 2)
@@ -118,186 +131,218 @@ class AugmentedManim(Scene):
         self.play(Create(l_frame), Create(r_frame), run_time=1.5)
         self.wait(0.5)
 
-        # ── RT-graph accumulation tracking ────────────────────────────
-        # 8 cycles total (4 phases × 2 repeats), each cycle -> 1 blue + 1 red block
-        n_blocks = 16
-        bw = RW / n_blocks   # block width in RT graph
-        rt_idx = 0
+        # ── RT-graph geometry (proportional to scan count) ────────────
+        # Each scan in the cycle gets one unit of RT-axis width.
+        # 8 cycles × 39 scans/cycle = 312 scans total.
+        n_scans_total = 8 * CYCLE_LENGTH            # 312
+        scan_uw = RW / n_scans_total                # width per scan in RT graph
+        ms2_block_w = MS2_PER_CYCLE * scan_uw       # width of a full MS2 phase block
+        rt_x_cursor = ro[0]                         # current right-edge of placed blocks
 
-        phases = list(INTERLEAVED_PHASES) * 2   # A B C D A B C D
+        # ── Main animation loop  (A B C D  ×  2) ─────────────────────
+        phases = list(INTERLEAVED_PHASES) * 2
 
         for ci, phase in enumerate(phases):
             fast = ci >= 1
-            t = 0.15 if fast else 0.7   # base run_time
+            t = 0.15 if fast else 0.7
 
-            # ════════════════════════════════════════════════════════════
-            #  MS1 SCAN  (blue)
-            # ════════════════════════════════════════════════════════════
-
-            # --- range labels on x-axis ---
-            lbl_min = Text(f"{MS1_MZ_MIN:.0f}", font_size=15).move_to(
-                lo + DOWN * 0.15, aligned_edge=UP
+            # ────────────────────────────────────────────────────────
+            # MS1 SCAN  (blue)
+            # ────────────────────────────────────────────────────────
+            lbl_ms1_min, lbl_ms1_max = self._range_labels(
+                MS1_MZ_MIN, MS1_MZ_MAX, lo, GW
             )
-            lbl_min.align_to(lo, LEFT)
-            lbl_max = Text(f"{MS1_MZ_MAX:.0f}", font_size=15).move_to(
-                lo + RIGHT * GW + DOWN * 0.15, aligned_edge=UP
+            ms1_rect = self._mz_rect(
+                MS1_MZ_MIN, MS1_MZ_MAX, lo, GW, GH,
+                fill_color=BLUE, fill_opacity=0.15,
+                stroke_color=BLUE, stroke_width=1.5,
             )
-            lbl_max.align_to(lo + RIGHT * GW, RIGHT)
+            bars_ms1 = self._make_bars_mz(
+                MS1_MZ_MIN, MS1_MZ_MAX, lo, GW, GH,
+                n=50 if not fast else 30, color=BLUE,
+            )
 
-            # --- blue rect filling the graph area ---
-            ms1_rect = Rectangle(
-                width=GW,
-                height=GH,
-                fill_color=BLUE,
-                fill_opacity=0.15,
-                stroke_color=BLUE,
-                stroke_width=1.5,
-            ).move_to(lo + np.array([GW / 2, GH / 2, 0]))
+            self.play(FadeIn(lbl_ms1_min, lbl_ms1_max, ms1_rect), run_time=t)
+            self.play(FadeIn(bars_ms1), run_time=t)
+            self.play(FadeOut(bars_ms1), run_time=t)
 
-            # --- random MS1-like spectrum ---
-            bars = self._make_bars(lo, GW, GH, n=50 if not fast else 30, color=BLUE)
-
-            self.play(FadeIn(lbl_min, lbl_max, ms1_rect), run_time=t)
-            self.play(FadeIn(bars), run_time=t)
-            self.play(FadeOut(bars), run_time=t)
-
-            # --- move blank blue rect into the RT graph ---
-            rt_h = RH * np.random.uniform(0.35, 0.75)
+            # Build the RT-graph MS1 block (a simple blue bar).
+            rt_h_ms1 = RH * np.random.uniform(0.35, 0.75)
             rt_ms1 = Rectangle(
-                width=bw * 0.88,
-                height=rt_h,
-                fill_color=BLUE,
-                fill_opacity=0.4,
-                stroke_color=BLUE,
-                stroke_width=0.5,
-            )
-            rt_x = ro[0] + bw * (rt_idx + 0.5)
-            rt_ms1.move_to(np.array([rt_x, ro[1], 0]), aligned_edge=DOWN)
+                width=scan_uw * 0.9, height=rt_h_ms1,
+                fill_color=BLUE, fill_opacity=0.5,
+                stroke_color=BLUE, stroke_width=0.5,
+            ).move_to([rt_x_cursor + scan_uw / 2, ro[1], 0], aligned_edge=DOWN)
 
             self.play(
-                FadeOut(lbl_min, lbl_max),
+                FadeOut(lbl_ms1_min, lbl_ms1_max),
                 ReplacementTransform(ms1_rect, rt_ms1),
                 run_time=t * 1.5,
             )
-            rt_idx += 1
+            rt_x_cursor += scan_uw
 
-            # ════════════════════════════════════════════════════════════
-            #  MS2 SCAN  (red, for current phase)
-            # ════════════════════════════════════════════════════════════
-
+            # ────────────────────────────────────────────────────────
+            # MS2 SCAN  (red)
+            # ────────────────────────────────────────────────────────
             p_min = phase["window_min_mz"]
             p_max = phase["window_max_mz"]
 
-            # --- range labels ---
-            lbl2_min = Text(f"{p_min:.0f}", font_size=15).move_to(
-                lo + DOWN * 0.15, aligned_edge=UP
-            )
-            lbl2_min.align_to(lo, LEFT)
-            lbl2_max = Text(f"{p_max:.0f}", font_size=15).move_to(
-                lo + RIGHT * GW + DOWN * 0.15, aligned_edge=UP
-            )
-            lbl2_max.align_to(lo + RIGHT * GW, RIGHT)
+            lbl_ms2_min, lbl_ms2_max = self._range_labels(p_min, p_max, lo, GW)
 
-            # --- big red rect covering the full phase range ---
-            ms2_rect = Rectangle(
-                width=GW,
-                height=GH,
-                fill_color=RED,
-                fill_opacity=0.10,
-                stroke_color=RED,
-                stroke_width=1.5,
-            ).move_to(lo + np.array([GW / 2, GH / 2, 0]))
+            ms2_rect = self._mz_rect(
+                p_min, p_max, lo, GW, GH,
+                fill_color=RED, fill_opacity=0.08,
+                stroke_color=RED, stroke_width=1.5,
+            )
 
-            # --- 38 sub-rects (one per isolation window) ---
-            sw = GW / MS2_PER_CYCLE
+            # 38 sub-rects at actual isolation-window m/z positions.
             subs = VGroup()
             sub_bars = VGroup()
             for i in range(MS2_PER_CYCLE):
-                sr = Rectangle(
-                    width=sw * 0.85,
-                    height=GH,
-                    fill_color=RED,
-                    fill_opacity=0.06,
-                    stroke_color=RED_A,
-                    stroke_width=0.3,
-                ).move_to(lo + np.array([sw * (i + 0.5), GH / 2, 0]))
+                center_mz = phase["target_min_mz"] + i * ISOLATION_TARGET_SPACING
+                win_min = center_mz - ISOLATION_WINDOW_HALF_WIDTH
+                win_max = center_mz + ISOLATION_WINDOW_HALF_WIDTH
+                sr = self._mz_rect(
+                    win_min, win_max, lo, GW, GH,
+                    fill_color=RED, fill_opacity=0.08,
+                    stroke_color=WHITE, stroke_width=0.8,
+                )
                 subs.add(sr)
-
-                sb = self._make_bars(
-                    lo + np.array([sw * i + sw * 0.08, 0, 0]),
-                    sw * 0.75,
-                    GH,
-                    n=5,
-                    color=RED,
+                sb = self._make_bars_mz(
+                    win_min, win_max, lo, GW, GH,
+                    n=5, color=RED,
                 )
                 sub_bars.add(sb)
 
-            self.play(FadeIn(lbl2_min, lbl2_max, ms2_rect), run_time=t)
+            self.play(FadeIn(lbl_ms2_min, lbl_ms2_max, ms2_rect), run_time=t)
 
             if not fast:
-                # slow: show each isolation window appearing one-by-one
                 for i in range(MS2_PER_CYCLE):
-                    self.play(
-                        FadeIn(subs[i], sub_bars[i]),
-                        run_time=0.08,
-                    )
+                    self.play(FadeIn(subs[i], sub_bars[i]), run_time=0.08)
                 self.wait(0.3)
                 self.play(FadeOut(sub_bars), run_time=t)
             else:
                 self.play(FadeIn(subs, sub_bars), run_time=t)
                 self.play(FadeOut(sub_bars), run_time=t * 0.5)
 
-            # --- move red rect + subs to RT graph ---
-            rt_h2 = RH * np.random.uniform(0.2, 0.55)
-            rt_ms2 = Rectangle(
-                width=bw * 0.88,
-                height=rt_h2,
-                fill_color=RED,
-                fill_opacity=0.4,
-                stroke_color=RED,
-                stroke_width=0.5,
+            # Build the RT-graph MS2 block: red rect + 38 visible sub-divisions.
+            rt_h_ms2 = RH * np.random.uniform(0.20, 0.55)
+            rt_ms2_group = self._make_rt_ms2_block(
+                rt_x_cursor, ro, rt_h_ms2, ms2_block_w, scan_uw
             )
-            rt_x2 = ro[0] + bw * (rt_idx + 0.5)
-            rt_ms2.move_to(np.array([rt_x2, ro[1], 0]), aligned_edge=DOWN)
 
-            ms2_group = VGroup(ms2_rect, subs)
+            ms2_left_group = VGroup(ms2_rect, subs)
             self.play(
-                FadeOut(lbl2_min, lbl2_max),
-                ReplacementTransform(ms2_group, rt_ms2),
+                FadeOut(lbl_ms2_min, lbl_ms2_max),
+                ReplacementTransform(ms2_left_group, rt_ms2_group),
                 run_time=t * 1.5,
             )
-            rt_idx += 1
+            rt_x_cursor += ms2_block_w
 
         self.wait(2)
 
-    # ── helpers ────────────────────────────────────────────────────────
+    # ── coordinate helpers ────────────────────────────────────────────
 
-    def _make_bars(
+    def _mz_to_x(self, mz: float, lo: np.ndarray, GW: float) -> float:
+        """Absolute x position for a given m/z on the fixed 300-1500 scale."""
+        return lo[0] + (mz - X_AXIS_MIN) / X_AXIS_SPAN * GW
+
+    def _mz_rect(
         self,
-        origin: np.ndarray,
-        width: float,
-        height: float,
+        mz_min: float,
+        mz_max: float,
+        lo: np.ndarray,
+        GW: float,
+        GH: float,
+        **rect_kwargs,
+    ) -> Rectangle:
+        """Rectangle spanning [mz_min, mz_max] on the fixed x-axis, full graph height."""
+        x_l = self._mz_to_x(mz_min, lo, GW)
+        x_r = self._mz_to_x(mz_max, lo, GW)
+        w = x_r - x_l
+        return Rectangle(width=w, height=GH, **rect_kwargs).move_to(
+            [(x_l + x_r) / 2, lo[1] + GH / 2, 0]
+        )
+
+    def _range_labels(
+        self,
+        mz_min: float,
+        mz_max: float,
+        lo: np.ndarray,
+        GW: float,
+    ) -> tuple:
+        """Pair of dynamic range labels placed below the x-axis at the rect edges."""
+        x_l = self._mz_to_x(mz_min, lo, GW)
+        x_r = self._mz_to_x(mz_max, lo, GW)
+        y = lo[1] - 0.52
+        lbl_min = Text(f"{mz_min:.0f}", font_size=13, color=WHITE).move_to([x_l, y, 0])
+        lbl_max = Text(f"{mz_max:.0f}", font_size=13, color=WHITE).move_to([x_r, y, 0])
+        return lbl_min, lbl_max
+
+    # ── bar generators ────────────────────────────────────────────────
+
+    def _make_bars_mz(
+        self,
+        mz_min: float,
+        mz_max: float,
+        lo: np.ndarray,
+        GW: float,
+        GH: float,
         n: int = 30,
         color=BLUE,
     ) -> VGroup:
-        """Random mass-spectrum-like vertical bars within a rectangular region."""
+        """Spectrum bars placed at correct m/z positions on the fixed scale."""
         bars = VGroup()
-        xs = np.sort(np.random.uniform(0.03, 0.97, n))
+        margin = (mz_max - mz_min) * 0.04
+        mz_vals = np.sort(
+            np.random.uniform(mz_min + margin, mz_max - margin, n)
+        )
         ys = np.random.exponential(0.25, n)
         ys = np.clip(ys, 0.02, None)
-        if ys.max() > 0:
-            ys /= ys.max()
-        # sprinkle a few dominant peaks
+        ys /= ys.max()
         for _ in range(max(1, n // 10)):
             ys[np.random.randint(n)] = np.random.uniform(0.55, 1.0)
 
-        for x_frac, y_frac in zip(xs, ys):
-            h = height * y_frac * 0.85
-            bar = Line(
-                origin + np.array([width * x_frac, 0, 0]),
-                origin + np.array([width * x_frac, h, 0]),
-                stroke_width=1.2,
-                color=color,
+        for mz, y_frac in zip(mz_vals, ys):
+            x = self._mz_to_x(mz, lo, GW)
+            h = GH * y_frac * 0.85
+            bars.add(
+                Line([x, lo[1], 0], [x, lo[1] + h, 0], stroke_width=1.2, color=color)
             )
-            bars.add(bar)
         return bars
+
+    # ── RT-graph block builder ────────────────────────────────────────
+
+    def _make_rt_ms2_block(
+        self,
+        x_start: float,
+        ro: np.ndarray,
+        height: float,
+        total_w: float,
+        scan_uw: float,
+    ) -> VGroup:
+        """Red RT block with MS2_PER_CYCLE visible sub-divisions (black borders)."""
+        cx = x_start + total_w / 2
+
+        outer = Rectangle(
+            width=total_w * 0.98,
+            height=height,
+            fill_color=RED,
+            fill_opacity=0.45,
+            stroke_color=RED,
+            stroke_width=1.0,
+        ).move_to([cx, ro[1], 0], aligned_edge=DOWN)
+
+        subs = VGroup()
+        for i in range(MS2_PER_CYCLE):
+            sub_cx = x_start + scan_uw * (i + 0.5)
+            sub = Rectangle(
+                width=scan_uw * 0.92,
+                height=height,
+                fill_opacity=0.0,
+                stroke_color=BLACK,
+                stroke_width=0.4,
+            ).move_to([sub_cx, ro[1], 0], aligned_edge=DOWN)
+            subs.add(sub)
+
+        return VGroup(outer, subs)
