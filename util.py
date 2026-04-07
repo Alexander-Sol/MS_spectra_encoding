@@ -793,19 +793,9 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
                     s=18, alpha=0.8, label='outliers')
         ax.scatter(centers[:,0], centers[:,1], c='k', marker='x', s=60)
         # Label points with BASE PEPTIDES
-        SHHWGYGK_spectra=[
-            2921, 2940, 3220, 3246, 3922, 4059, 4091
-        ]
         HNGPEHWHKDFPIANGER_Spectra= [
             3770, 3811, 3826, 3960, 3997, 4162, 4165, 4185, 4197, 4494, 
             4507, 4595, 4597, 4643, 4710, 4727, 4949, 4950, 4961, 4963, 5097
-        ]
-        LVQFHFHWGSSDDQGSEHTVDRK_Spectra = [
-            5211, 5225, 5231, 5241, 5248, 5286, 5465, 5996
-        ]
-        QSPVDIDTK_Spectra = [
-            3551, 3819, 4068, 4127, 4293, 4293, 4366, 4477, 
-            5155, 5171, 5340, 5480
         ]
         RMVNNGHSFNVEYDDSQDK_Spectra = [
             3325, 3340, 3452, 3483, 3612, 3758, 3809, 3834, 3835, 3837, 
@@ -816,19 +806,15 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
             4863, 4711, 4842, 457, 4683, 5124, 4544, 4772,
             5044, 4693, 5356, 6438, 5668, 4690
         ]
-        for i in range(len(X2)):
-            # if scan_numbers[i] in SHHWGYGK_spectra:
-            #     ax.text(X2[i, 0], X2[i, 1], 'S', fontsize=12, alpha=0.8, color='black')
-            if scan_numbers[i] in HNGPEHWHKDFPIANGER_Spectra:
-                ax.text(X2[i, 0], X2[i, 1], 'H', fontsize=12, alpha=0.8, color='red')
-            # elif scan_numbers[i] in LVQFHFHWGSSDDQGSEHTVDRK_Spectra:
-            #     ax.text(X2[i, 0], X2[i, 1], 'L', fontsize=12, alpha=0.8, color='red')
-            elif scan_numbers[i] in QSPVDIDTK_Spectra:
-                ax.text(X2[i, 0], X2[i, 1], 'Q', fontsize=12, alpha=0.8, color='black')
-            elif scan_numbers[i] in RMVNNGHSFNVEYDDSQDK_Spectra:
-                ax.text(X2[i, 0], X2[i, 1], 'R', fontsize=12, alpha=0.8, color='green')
-            elif scan_numbers[i] in MVNNGHSFNVEYDDSQDKAVLK_Spectra:
-                ax.text(X2[i, 0], X2[i, 1], 'M', fontsize=12, alpha=0.8, color='teal')
+        # for i in range(len(X2)):
+        #     if scan_numbers[i] in HNGPEHWHKDFPIANGER_Spectra:
+        #         ax.text(X2[i, 0], X2[i, 1], 'H', fontsize=12, alpha=0.8, color='magenta')
+        #     elif scan_numbers[i] in RMVNNGHSFNVEYDDSQDK_Spectra:
+        #         ax.text(X2[i, 0], X2[i, 1], 'R', fontsize=12, alpha=0.8, color='teal')
+        #     elif scan_numbers[i] in MVNNGHSFNVEYDDSQDKAVLK_Spectra:
+        #         ax.text(X2[i, 0], X2[i, 1], 'M', fontsize=12, alpha=0.8, color='green')
+        #     else:
+        #         ax.text(X2[i, 0], X2[i, 1], scan_numbers[i], fontsize=12, alpha=0.6, color='black')
         ax.set_title(title, fontsize=12)
         ax.set_xlabel('Dim1')
         ax.set_ylabel('Dim2')
