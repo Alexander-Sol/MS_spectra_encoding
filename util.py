@@ -770,6 +770,24 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
         ax.set_ylabel('Dim2')
         ax.grid(alpha=0.25)
 
+        from matplotlib.lines import Line2D
+
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', label='HNGPEHWHKDFPIANGER',
+                markerfacecolor='magenta', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='RMVNNGHSFNVEYDDSQDK',
+                markerfacecolor='teal', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='MVNNGHSFNVEYDDSQDKAVLK',
+                markerfacecolor='green', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='SHHWGYGK',
+                markerfacecolor='orange', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='QSPVDIDTK',
+                markerfacecolor='blue', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='LVQFHFHWGSSDDQGSEHTVDRK',
+                markerfacecolor='purple', markersize=8),
+        ]
+        ax.legend(handles=legend_elements, title="Peptide Key", loc='upper right')
+
     plot_with_shared_colors(axes[0], Xs2, centers_s, labels_shared, out_s,
                             f'Unhashed UMAP - {N_CLUSTERS} reference clusters')
     plot_with_shared_colors(axes[1], Xh2, centers_h, labels_shared, out_h,
