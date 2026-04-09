@@ -78,8 +78,8 @@ EXAMPLE_TARGET_CYCLES = (1, 5, 9, 13, 17)
 
 # Fixed x-axis range for the left graph — never changes.
 X_AXIS_MIN = 300.0
-X_AXIS_MAX = 1500.0
-X_AXIS_SPAN = X_AXIS_MAX - X_AXIS_MIN  # 1200.0
+X_AXIS_MAX = 1600.0
+X_AXIS_SPAN = X_AXIS_MAX - X_AXIS_MIN  # 1300.0
 
 
 class AugmentedManim(Scene):
@@ -105,10 +105,10 @@ class AugmentedManim(Scene):
             .next_to(l_yaxis, LEFT, buff=0.25)
         )
 
-        # Permanent x-axis tick marks and labels (fixed 300–1500 scale).
+        # Permanent x-axis tick marks and labels.
         l_ticks = VGroup()
         l_tick_labels = VGroup()
-        for mz in [300, 600, 900, 1200, 1500]:
+        for mz in [400, 700, 1000, 1300, 1600]:
             x = self._mz_to_x(mz, lo, GW)
             l_ticks.add(Line([x, lo[1], 0], [x, lo[1] - 0.12, 0], stroke_width=1.5))
             l_tick_labels.add(
@@ -275,9 +275,14 @@ class AugmentedManim(Scene):
         x_l = self._mz_to_x(mz_min, lo, GW)
         x_r = self._mz_to_x(mz_max, lo, GW)
         y = lo[1] - 0.52
-        lbl_min = Text(f"{mz_min:.0f}", font_size=13, color=WHITE).move_to([x_l, y, 0])
-        lbl_max = Text(f"{mz_max:.0f}", font_size=13, color=WHITE).move_to([x_r, y, 0])
-        return lbl_min, lbl_max
+        lbl_min = Text(f"{mz_min:.1f}", font_size=13, color=YELLOW).move_to([x_l, y, 0])
+        lbl_max = Text(f"{mz_max:.1f}", font_size=13, color=PURPLE).move_to([x_r, y, 0])
+        
+        # Vertical lines extending from the x-axis to the labels
+        line_l = Line([x_l, lo[1], 0], [x_l, y + 0.15, 0], stroke_width=1, color=YELLOW)
+        line_r = Line([x_r, lo[1], 0], [x_r, y + 0.15, 0], stroke_width=1, color=PURPLE)
+        
+        return VGroup(lbl_min, line_l), VGroup(lbl_max, line_r)
 
     # ── bar generators ────────────────────────────────────────────────
 
