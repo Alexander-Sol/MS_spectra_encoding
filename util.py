@@ -774,19 +774,19 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
 
         legend_elements = [
             Line2D([0], [0], marker='o', color='w', label='HNGPEHWHKDFPIANGER',
-                markerfacecolor='magenta', markersize=8),
+                markerfacecolor='#e377c3', markersize=8),
             Line2D([0], [0], marker='o', color='w', label='RMVNNGHSFNVEYDDSQDK',
-                markerfacecolor='teal', markersize=8),
+                markerfacecolor='#9edbe5', markersize=8),
             Line2D([0], [0], marker='o', color='w', label='MVNNGHSFNVEYDDSQDKAVLK',
-                markerfacecolor='green', markersize=8),
+                markerfacecolor='#2d9d2c', markersize=8),
             Line2D([0], [0], marker='o', color='w', label='SHHWGYGK',
-                markerfacecolor='orange', markersize=8),
+                markerfacecolor='#bcbd22', markersize=8),
             Line2D([0], [0], marker='o', color='w', label='QSPVDIDTK',
-                markerfacecolor='blue', markersize=8),
+                markerfacecolor='#1e78b4', markersize=8),
             Line2D([0], [0], marker='o', color='w', label='LVQFHFHWGSSDDQGSEHTVDRK',
-                markerfacecolor='purple', markersize=8),
+                markerfacecolor='#9567bd', markersize=8),
         ]
-        ax.legend(handles=legend_elements, title="Peptide Key", loc='upper right')
+        ax.legend(handles=legend_elements, title="Peptide Key", loc='center')
 
     plot_with_shared_colors(axes[0], Xs2, centers_s, labels_shared, out_s,
                             f'Unhashed UMAP - {N_CLUSTERS} reference clusters')
