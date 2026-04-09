@@ -144,7 +144,7 @@ class AugmentedManim(Scene):
 
         for ci, phase in enumerate(phases):
             fast = ci >= 1
-            t = 0.15 if fast else 0.7
+            t = 0.45 if fast else 0.7
 
             # ────────────────────────────────────────────────────────
             # MS1 SCAN  (blue)
@@ -163,6 +163,12 @@ class AugmentedManim(Scene):
             )
 
             self.play(FadeIn(lbl_ms1_min, lbl_ms1_max, ms1_rect), run_time=t)
+            
+            # --- Label for MS1 ---
+            ms1_bracket = BraceBetweenPoints(ms1_rect.get_corner(DL), ms1_rect.get_corner(DR), direction=DOWN)
+            ms1_bracket_lbl = ms1_bracket.get_text("1 MS1 per cycle", font_size=14).set_color(BLUE)
+            self.play(Create(ms1_bracket), Write(ms1_bracket_lbl), run_time=t)
+
             self.play(FadeIn(bars_ms1), run_time=t)
             self.play(FadeOut(bars_ms1), run_time=t)
 
@@ -175,7 +181,7 @@ class AugmentedManim(Scene):
             ).move_to([rt_x_cursor + scan_uw / 2, ro[1], 0], aligned_edge=DOWN)
 
             self.play(
-                FadeOut(lbl_ms1_min, lbl_ms1_max),
+                FadeOut(lbl_ms1_min, lbl_ms1_max, ms1_bracket, ms1_bracket_lbl),
                 ReplacementTransform(ms1_rect, rt_ms1),
                 run_time=t * 1.5,
             )
@@ -216,6 +222,11 @@ class AugmentedManim(Scene):
 
             self.play(FadeIn(lbl_ms2_min, lbl_ms2_max, ms2_rect), run_time=t)
 
+            # --- Label for MS2 ---
+            ms2_bracket = BraceBetweenPoints(ms2_rect.get_corner(DL), ms2_rect.get_corner(DR), direction=DOWN)
+            ms2_bracket_lbl = ms2_bracket.get_text(f"{MS2_PER_CYCLE} MS2 per cycle", font_size=14).set_color(RED)
+            self.play(Create(ms2_bracket), Write(ms2_bracket_lbl), run_time=t)
+
             if not fast:
                 for i in range(MS2_PER_CYCLE):
                     self.play(FadeIn(subs[i], sub_bars[i]), run_time=0.08)
@@ -233,7 +244,7 @@ class AugmentedManim(Scene):
 
             ms2_left_group = VGroup(ms2_rect, subs)
             self.play(
-                FadeOut(lbl_ms2_min, lbl_ms2_max),
+                FadeOut(lbl_ms2_min, lbl_ms2_max, ms2_bracket, ms2_bracket_lbl),
                 ReplacementTransform(ms2_left_group, rt_ms2_group),
                 run_time=t * 1.5,
             )
