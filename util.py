@@ -81,7 +81,7 @@ def get_all_MS2_objects(mzml_path, max_spectra=None):
                 su_spectrum = sus.MsmsSpectrum(spectrum_id, precursor_mz, precursor_charge, mz, intensity, retention_time=retention_time)
 
                 # Process the spectrum
-                processed_spectrum = (su_spectrum.filter_intensity(0.05, 50)
+                processed_spectrum = (su_spectrum.filter_intensity(0.05, 100)
                                     .remove_precursor_peak(fragment_tol_mass=10, fragment_tol_mode='ppm') # used 0.5, Da
                                     .scale_intensity('root'))
 
