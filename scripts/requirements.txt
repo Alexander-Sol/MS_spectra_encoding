@@ -1,0 +1,2 @@
+# manim is only required for creating animations, which is not necessary for most users 
+# manim==0.19.0
