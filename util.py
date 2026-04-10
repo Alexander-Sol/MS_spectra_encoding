@@ -768,25 +768,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
     def plot_with_shared_colors(ax, X2, centers, labels, out_mask, title):
-        """Plot with colors based on unhashed clustering"""
-        # Voronoi background
-        pad = 0.08
-        x_min, x_max = X2[:,0].min(), X2[:,0].max()
-        y_min, y_max = X2[:,1].min(), X2[:,1].max()
-        dx = x_max - x_min
-        dy = y_max - y_min
-        x_min -= dx*pad; x_max += dx*pad
-        y_min -= dy*pad; y_max += dy*pad
-        gx = gy = 200
-        xx = np.linspace(x_min, x_max, gx)
-        yy = np.linspace(y_min, y_max, gy)
-        xxg, yyg = np.meshgrid(xx, yy)
-        grid = np.stack([xxg.ravel(), yyg.ravel()], axis=1)
-        d = np.linalg.norm(grid[:, None, :] - centers[None, :, :], axis=2)
-        nearest = np.argmin(d, axis=1).reshape(gy, gx)
-        cmap = plt.get_cmap('tab20')
-        ax.pcolormesh(xxg, yyg, nearest, cmap=cmap, shading='auto', alpha=0.18)
-        
+        """Plot with colors based on unhashed reference labels."""
         # Plot points with shared colors
         ax.scatter(X2[~out_mask,0], X2[~out_mask,1], c=labels[~out_mask], 
                 cmap='tab20', s=28, edgecolor='k', linewidth=0.2)
@@ -794,42 +776,36 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
             ax.scatter(X2[out_mask,0], X2[out_mask,1], c='lightgray', 
                     s=18, alpha=0.8, label='outliers')
         ax.scatter(centers[:,0], centers[:,1], c='k', marker='x', s=60)
-        # Label points with BASE PEPTIDES
-        HNGPEHWHKDFPIANGER_Spectra= [
-            3770, 3811, 3826, 3960, 3997, 4162, 4165, 4185, 4197, 4494, 
-            4507, 4595, 4597, 4643, 4710, 4727, 4949, 4950, 4961, 4963, 5097
-        ]
-        RMVNNGHSFNVEYDDSQDK_Spectra = [
-            3325, 3340, 3452, 3483, 3612, 3758, 3809, 3834, 3835, 3837, 
-            3864, 3914, 3925, 3982, 3990, 3992, 4010, 4018, 4022, 4023, 
-            4086, 4217, 4262, 4510, 4686
-        ]
-        MVNNGHSFNVEYDDSQDKAVLK_Spectra = [
-            4863, 4711, 4842, 457, 4683, 5124, 4544, 4772,
-            5044, 4693, 5356, 6438, 5668, 4690
-        ]
-        # for i in range(len(X2)):
-        #     if scan_numbers[i] in HNGPEHWHKDFPIANGER_Spectra:
-        #         ax.text(X2[i, 0], X2[i, 1], 'H', fontsize=12, alpha=0.8, color='magenta')
-        #     elif scan_numbers[i] in RMVNNGHSFNVEYDDSQDK_Spectra:
-        #         ax.text(X2[i, 0], X2[i, 1], 'R', fontsize=12, alpha=0.8, color='teal')
-        #     elif scan_numbers[i] in MVNNGHSFNVEYDDSQDKAVLK_Spectra:
-        #         ax.text(X2[i, 0], X2[i, 1], 'M', fontsize=12, alpha=0.8, color='green')
-        #     else:
-        #         ax.text(X2[i, 0], X2[i, 1], scan_numbers[i], fontsize=12, alpha=0.6, color='black')
         ax.set_title(title, fontsize=12)
         ax.set_xlabel('Dim1')
         ax.set_ylabel('Dim2')
         ax.grid(alpha=0.25)
 
-    plot_with_shared_colors(axes[0], Xs2, centers_s_valid, labels_shared, out_s,
-                            f'Unhashed (Full Precision) - {N_CLUSTERS} clusters')
-    plot_with_shared_colors(axes[1], Xh2, centers_h_valid, labels_shared, out_h,
-                            f'Hashed ({hash_buckets} buckets) - Same {N_CLUSTERS} clusters')
+        from matplotlib.lines import Line2D
+
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', label='HNGPEHWHKDFPIANGER',
+                markerfacecolor='#e377c3', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='RMVNNGHSFNVEYDDSQDK',
+                markerfacecolor='#9edbe5', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='MVNNGHSFNVEYDDSQDKAVLK',
+                markerfacecolor='#2d9d2c', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='SHHWGYGK',
+                markerfacecolor='#bcbd22', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='QSPVDIDTK',
+                markerfacecolor='#1e78b4', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='LVQFHFHWGSSDDQGSEHTVDRK',
+                markerfacecolor='#9567bd', markersize=8),
+        ]
+        ax.legend(handles=legend_elements, title="Peptide Key", loc='center')
+
+    plot_with_shared_colors(axes[0], Xs2, centers_s, labels_shared, out_s,
+                            f'Unhashed UMAP - {N_CLUSTERS} reference clusters')
+    plot_with_shared_colors(axes[1], Xh2, centers_h, labels_shared, out_h,
+                            f'Hashed UMAP ({hash_buckets} buckets) - colored by unhashed labels')
 
     plt.tight_layout()
     plt.show()
-
 
 def plot_theoretical_ions(b_mz, y_mz, peptide):
     # Peak height scaling (b1/y1 highest, b20/y20 lowest)
