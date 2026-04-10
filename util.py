@@ -1,4 +1,4 @@
-#from altair import X2
+from altair import X2
 import pandas as pd
 import numpy as np
 import spectrum_utils.plot as sup
@@ -13,7 +13,7 @@ import numpy as np
 
 import numpy as np
 from scipy.spatial import distance
-import pandas as pds
+import pandas as pd
 import re
 
 
@@ -21,6 +21,8 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import RobustScaler
 from sklearn.manifold import TSNE
+
+import SpectrumWithTransformations
 
 
 
@@ -170,7 +172,7 @@ def get_MS2_object(mzml_path, scan, peptide = None):
                 su_spectrum = sus.MsmsSpectrum(spectrum_id, precursor_mz, precursor_charge, mz, intensity, retention_time=retention_time)
 
                 # Process the spectrum
-                su_spectrum = (su_spectrum.filter_intensity(0.05, 50)
+                su_spectrum = (su_spectrum.filter_intensity(0.05, 100)
                             .remove_precursor_peak(fragment_tol_mass=10, fragment_tol_mode='ppm') # used to be 0.5, Da
                             .scale_intensity('root'))
                 break
@@ -425,8 +427,7 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
 
 
 # @title Proving Similarity preservation empirically 
-def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.04, hash_buckets = 10000, max_spectra=300, 
-                                                       spectra_idx_to_compare=None, k_means=None):
+def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.04, hash_buckets = 10000, max_spectra=300, spectra_idx_to_compare=None, k_means=None):
     import mmh3
     import re
       # Demonstrate similarity preservation between original sparse maps and hashed vectors
@@ -473,9 +474,6 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
         all_intensities = []
         for ms2 in spectra_to_compare:
             all_intensities.extend(ms2.intensity)
-
-        print(f"Before normalization:\n Mean intensity: {np.mean(all_intensities)}\n " 
-              f"Median intensity: {np.median(all_intensities)}")
         
         max_int = max(all_intensities)
         min_int = min(all_intensities)
@@ -496,17 +494,17 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
         
         return normalized_spectra
 
-        # Get normalized data
-     # normalized_spectra_tuples = normalize_intensity()
+    # Get normalized data
+    normalized_spectra_tuples = normalize_intensity()
 
     # Mutate spectra_to_compare to use normalized data
-    """     spectra_to_compare = [
+    spectra_to_compare = [
         type('NormalizedSpectrum', (), {
             'mz': mz_array, 
             'intensity': intensity_array
         })() 
         for mz_array, intensity_array in normalized_spectra_tuples
-    ] """
+    ]
 
 
     def create_sparse_map(mz_array, intensity_array): # same as our code above.
@@ -514,31 +512,24 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
         sparse_map = {}
         for mz, intensity in zip(mz_array, intensity_array):
             idx = int(mz // WIDTH_OF_BIN)
-            sparse_map[idx] = sparse_map.get(idx, 0) + intensity
+            sparse_map[idx] = intensity
         return sparse_map
 
-    def hash_bucket_and_sign(sparse_idx, num_buckets=hash_buckets):
-        """Map a sparse index to a bucket and a deterministic sign for signed hashing."""
-        bucket_idx = mmh3.hash(str(sparse_idx), seed=42) % num_buckets
-        sign = 1 if mmh3.hash(str(sparse_idx), seed=43) % 2 == 0 else -1
-        return bucket_idx, sign
-
     def sparse_map_to_hash_vector(sparse_map, num_buckets=hash_buckets):
-        """Convert sparse map to a signed hash vector."""
+        """Convert sparse map to hash vector"""
         hash_vec = [0] * num_buckets
         for sparse_idx, intensity in sparse_map.items():
-            bucket_idx, sign = hash_bucket_and_sign(sparse_idx, num_buckets)
-            hash_vec[bucket_idx] += sign * intensity
+            bucket_idx = mmh3.hash(str(sparse_idx), seed=42) % num_buckets
+            hash_vec[bucket_idx] += intensity
         return hash_vec
     
-    def sparse_map_to_hash_vector_2(sparse_map, key_to_hash, num_buckets=hash_buckets):
-        """Convert sparse map to a signed hash vector using pre-computed mappings."""
+    def sparse_map_to_hash_vector_2(sparse_map, key_to_bucket, num_buckets=hash_buckets):
+        """Convert sparse map to hash vector using pre-computed key_to_bucket mapping"""
         hash_vec = [0] * num_buckets
         for sparse_idx, intensity in sparse_map.items():
-            hash_info = key_to_hash.get(sparse_idx)
-            if hash_info is not None:
-                bucket_idx, sign = hash_info
-                hash_vec[bucket_idx] += sign * intensity
+            bucket_idx = key_to_bucket.get(sparse_idx)
+            if bucket_idx is not None:
+                hash_vec[bucket_idx] += intensity
         return hash_vec
 
     def cosine_similarity(vec1, vec2):
@@ -559,7 +550,6 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
         
         # Cosine similarity = dot_product / (norm1 * norm2)
         return dot_prod / (norm1 * norm2)
-    
     def sparse_cosine_similarity(map1, map2):
         """Calculate cosine similarity between two sparse maps (returns value between 0 and 1)"""
         # Get all unique indices from both maps
@@ -580,14 +570,15 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
         sparse_map_keys |= set(sparse_map.keys())
         sparse_maps.append(sparse_map)
     
-    # Create dictionary mapping sparse-map keys to signed hash outputs.
-    key_to_hash = {}
+    # Create dictionary mapping sparse map keys to their hashed bucket indices (for analysis)
+    key_to_bucket = {}
     for key in sparse_map_keys:
-        key_to_hash[key] = hash_bucket_and_sign(key, hash_buckets)
+        bucket_idx = mmh3.hash(str(key), seed=42) % hash_buckets
+        key_to_bucket[key] = bucket_idx
      
-    # Now create hash vectors using the pre-computed signed hash mapping.
+    # Now create hash vectors using the new mapping function that relies on pre-computed key_to_bucket
     for sparse_map in sparse_maps:
-        hash_vec = sparse_map_to_hash_vector_2(sparse_map, key_to_hash, hash_buckets)
+        hash_vec = sparse_map_to_hash_vector_2(sparse_map, key_to_bucket, hash_buckets)
         hash_vectors.append(hash_vec)
 
     Xh = np.array(hash_vectors)
@@ -672,36 +663,61 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     hash_upper = hash_similarities[upper_indices]
     
     perp = min(30, max(5, (n_spectra // 3)))
-
+    
+    # Ensure both PCA matrices have same number of columns for concatenation
+    min_cols = min(Xs_pca.shape[1], Xh_pca.shape[1])
+    Xs_pca_aligned = Xs_pca[:, :min_cols]
+    Xh_pca_aligned = Xh_pca[:, :min_cols]
+    
     import umap
-    umap_s = umap.UMAP(n_components=2, n_neighbors=perp, min_dist=0.1, random_state=0)
-    umap_h = umap.UMAP(n_components=2, n_neighbors=perp, min_dist=0.1, random_state=0)
-    Xs2 = umap_s.fit_transform(Xs_pca)
-    Xh2 = umap_h.fit_transform(Xh_pca)
+    combined_pca = np.vstack([Xs_pca_aligned, Xh_pca_aligned])
+    umap_combined = umap.UMAP(n_components=2, n_neighbors=perp, min_dist=0.1, random_state=0)
+    combined_2d = umap_combined.fit_transform(combined_pca)
 
-    # Cluster on the unhashed representation only, then reuse those labels on both plots.
+    # from sklearn.manifold import TSNE
+    # #  Run t-SNE on combined data
+    # combined_pca = np.vstack([Xs_pca_aligned, Xh_pca_aligned])
+    # perp = min(30, max(5, (combined_pca.shape[0] - 1) // 3))
+    # tsne = TSNE(
+    #     n_components=2,
+    #     perplexity=perp,
+    #     random_state=0,
+    #     init='pca',
+    #     learning_rate='auto'
+    # )
+    # combined_2d = tsne.fit_transform(combined_pca)
+    
+    # Split back into unhashed and hashed embeddings
+    Xs2 = combined_2d[:n_spectra]
+    Xh2 = combined_2d[n_spectra:]
+    
+    # Cluster on the combined 2D embedding with shared clustering
     if k_means is not None:
         N_CLUSTERS = k_means
     else:
         N_CLUSTERS = 12
 
     try:
-        km_reference = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(Xs2)
-        km_hashed = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(Xh2)
+        km_combined = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(combined_2d)
     except Exception as e:
         logging.getLogger(__name__).warning('KMeans failed: %s', e)
         return
     
-    labels_shared = km_reference.labels_
-    labels_hashed = km_hashed.labels_
+    labels_shared = km_combined.labels_[:n_spectra]  # Use first half for both plots
 
-    # Calculate per-plot centers from the shared reference labels.
+    # Calculate centers for visualization based on actual cluster assignments in shared space
+    # Handle empty clusters by checking if they have points
     centers_s = np.array([Xs2[labels_shared == k].mean(axis=0) if (labels_shared == k).any() 
                         else np.zeros(Xs2.shape[1]) for k in range(N_CLUSTERS)])
     centers_h = np.array([Xh2[labels_shared == k].mean(axis=0) if (labels_shared == k).any() 
                         else np.zeros(Xh2.shape[1]) for k in range(N_CLUSTERS)])
+    
+    # Make sure to only keep valid clusters that have points assigned to them for better visualization
+    valid_clusters = np.array([(labels_shared == k).any() for k in range(N_CLUSTERS)])
+    centers_s_valid = centers_s[valid_clusters]
+    centers_h_valid = centers_h[valid_clusters]
 
-    # Detect outliers relative to the shared labels in each embedding.
+    # Detect outliers using shared clustering
     dists_s = np.linalg.norm(Xs2 - centers_s[labels_shared], axis=1)
     dists_h = np.linalg.norm(Xh2 - centers_h[labels_shared], axis=1)
     thr_s = np.percentile(dists_s, 90)
@@ -714,9 +730,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     gs = fig.add_gridspec(2, 2, height_ratios=[1, 1], width_ratios=[1, 1])
 
     from scipy.stats import pearsonr, spearmanr
-    from sklearn.metrics import adjusted_rand_score
     pearson_corr, pearson_pval = pearsonr(sparse_upper, hash_upper)
-    ari_score = adjusted_rand_score(labels_shared, labels_hashed)
 
     from IPython.display import display, Markdown
 
@@ -726,7 +740,6 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
 ### SIMILARITY PRESERVATION METRICS
 ---
 - **Pearson correlation**:  {pearson_corr:.4f} (p-value: {pearson_pval:.2e})
-- **Adjusted Rand Index (independent KMeans on UMAP spaces)**: {ari_score:.4f}
 - **Number of pairwise comparisons**: {len(sparse_upper):,}
 - **Mean absolute error**: {np.mean(np.abs(sparse_upper - hash_upper)):.4f}
 ---
@@ -735,9 +748,7 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     # Top row: Scatter plot comparing similarities
     ax_scatter = fig.add_subplot(gs[0, :])
     ax_scatter.scatter(sparse_upper, hash_upper, alpha=0.3, s=10, edgecolors='none')
-    lower_bound = min(0.0, float(np.min(sparse_upper)), float(np.min(hash_upper)))
-    upper_bound = max(1.0, float(np.max(sparse_upper)), float(np.max(hash_upper)))
-    ax_scatter.plot([lower_bound, upper_bound], [lower_bound, upper_bound], 'r--', linewidth=2, label='Perfect preservation')
+    ax_scatter.plot([0, 1], [0, 1], 'r--', linewidth=2, label='Perfect preservation')
     ax_scatter.set_xlabel('Unhashed (Sparse) Cosine Similarity', fontsize=12)
     ax_scatter.set_ylabel('Hashed Cosine Similarity', fontsize=12)
     ax_scatter.set_title(f'Pairwise Similarity Preservation\n' + 
@@ -745,8 +756,8 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
                         fontsize=12)  # Match the bottom title font size
     ax_scatter.legend()
     ax_scatter.grid(alpha=0.3)
-    ax_scatter.set_xlim(lower_bound, upper_bound)
-    ax_scatter.set_ylim(lower_bound, upper_bound)
+    ax_scatter.set_xlim(0, 1)
+    ax_scatter.set_ylim(0, 1)
     ax_scatter.set_aspect('equal')
     
     plt.show()
@@ -757,7 +768,25 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
     def plot_with_shared_colors(ax, X2, centers, labels, out_mask, title):
-        """Plot with colors based on unhashed reference labels."""
+        """Plot with colors based on unhashed clustering"""
+        # Voronoi background
+        pad = 0.08
+        x_min, x_max = X2[:,0].min(), X2[:,0].max()
+        y_min, y_max = X2[:,1].min(), X2[:,1].max()
+        dx = x_max - x_min
+        dy = y_max - y_min
+        x_min -= dx*pad; x_max += dx*pad
+        y_min -= dy*pad; y_max += dy*pad
+        gx = gy = 200
+        xx = np.linspace(x_min, x_max, gx)
+        yy = np.linspace(y_min, y_max, gy)
+        xxg, yyg = np.meshgrid(xx, yy)
+        grid = np.stack([xxg.ravel(), yyg.ravel()], axis=1)
+        d = np.linalg.norm(grid[:, None, :] - centers[None, :, :], axis=2)
+        nearest = np.argmin(d, axis=1).reshape(gy, gx)
+        cmap = plt.get_cmap('tab20')
+        ax.pcolormesh(xxg, yyg, nearest, cmap=cmap, shading='auto', alpha=0.18)
+        
         # Plot points with shared colors
         ax.scatter(X2[~out_mask,0], X2[~out_mask,1], c=labels[~out_mask], 
                 cmap='tab20', s=28, edgecolor='k', linewidth=0.2)
@@ -765,15 +794,38 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
             ax.scatter(X2[out_mask,0], X2[out_mask,1], c='lightgray', 
                     s=18, alpha=0.8, label='outliers')
         ax.scatter(centers[:,0], centers[:,1], c='k', marker='x', s=60)
+        # Label points with BASE PEPTIDES
+        HNGPEHWHKDFPIANGER_Spectra= [
+            3770, 3811, 3826, 3960, 3997, 4162, 4165, 4185, 4197, 4494, 
+            4507, 4595, 4597, 4643, 4710, 4727, 4949, 4950, 4961, 4963, 5097
+        ]
+        RMVNNGHSFNVEYDDSQDK_Spectra = [
+            3325, 3340, 3452, 3483, 3612, 3758, 3809, 3834, 3835, 3837, 
+            3864, 3914, 3925, 3982, 3990, 3992, 4010, 4018, 4022, 4023, 
+            4086, 4217, 4262, 4510, 4686
+        ]
+        MVNNGHSFNVEYDDSQDKAVLK_Spectra = [
+            4863, 4711, 4842, 457, 4683, 5124, 4544, 4772,
+            5044, 4693, 5356, 6438, 5668, 4690
+        ]
+        # for i in range(len(X2)):
+        #     if scan_numbers[i] in HNGPEHWHKDFPIANGER_Spectra:
+        #         ax.text(X2[i, 0], X2[i, 1], 'H', fontsize=12, alpha=0.8, color='magenta')
+        #     elif scan_numbers[i] in RMVNNGHSFNVEYDDSQDK_Spectra:
+        #         ax.text(X2[i, 0], X2[i, 1], 'R', fontsize=12, alpha=0.8, color='teal')
+        #     elif scan_numbers[i] in MVNNGHSFNVEYDDSQDKAVLK_Spectra:
+        #         ax.text(X2[i, 0], X2[i, 1], 'M', fontsize=12, alpha=0.8, color='green')
+        #     else:
+        #         ax.text(X2[i, 0], X2[i, 1], scan_numbers[i], fontsize=12, alpha=0.6, color='black')
         ax.set_title(title, fontsize=12)
         ax.set_xlabel('Dim1')
         ax.set_ylabel('Dim2')
         ax.grid(alpha=0.25)
 
-    plot_with_shared_colors(axes[0], Xs2, centers_s, labels_shared, out_s,
-                            f'Unhashed UMAP - {N_CLUSTERS} reference clusters')
-    plot_with_shared_colors(axes[1], Xh2, centers_h, labels_shared, out_h,
-                            f'Hashed UMAP ({hash_buckets} buckets) - colored by unhashed labels')
+    plot_with_shared_colors(axes[0], Xs2, centers_s_valid, labels_shared, out_s,
+                            f'Unhashed (Full Precision) - {N_CLUSTERS} clusters')
+    plot_with_shared_colors(axes[1], Xh2, centers_h_valid, labels_shared, out_h,
+                            f'Hashed ({hash_buckets} buckets) - Same {N_CLUSTERS} clusters')
 
     plt.tight_layout()
     plt.show()
@@ -806,3 +858,49 @@ def plot_theoretical_ions(b_mz, y_mz, peptide):
         ax.text(x, h + 0.02, f"y{j}", rotation=90, ha="center", va="bottom", fontsize=8)
 
     plt.show()
+
+# This function should read in an mzml file and return an object of type SpectrumWithTransformations
+# Based off of get_MS2_object from Sam Payne lesson 4
+def get_SWT_object(
+    mzml_path: str,
+    scan_number: int,
+    full_sequence = None,
+) -> "SpectrumWithTransformations":
+    
+    index = scan_number -1 #scan_number is 1-based, index is 0-based
+    with mzml.MzML(mzml_path, use_index=True) as reader: #use_index=True allows us to avoid reading through the entire mzml file
+        selected_spectrum = reader.get_by_index(index)
+    # Test to see if we accessed the correct scan: PASSED!
+    # precursor_mz = selected_spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
+    # print(precursor_mz)
+    
+    # This finds the cooresponding values in the .mzml file to create our MS2 for a given scan (see the params)
+    spectrum_id = selected_spectrum['id']
+    retention_time = selected_spectrum['scanList']['scan'][0]['scan start time']
+    precursor_mz = selected_spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
+    precursor_charge = int(selected_spectrum['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]['charge state'])
+    mz_array = np.asarray(selected_spectrum['m/z array'])
+    intensity_array = np.asarray(selected_spectrum['intensity array'])
+    
+    swt_object = SpectrumWithTransformations.SpectrumWithTransformations(
+        identifier=spectrum_id,
+        scan_number=scan_number,
+        precursor_mz=precursor_mz,
+        precursor_charge=precursor_charge,
+        mz_array=mz_array,
+        intensity_array=intensity_array,
+        retention_time=retention_time,
+        annotation_dictionary=None,
+        binned_mz=None,
+        hashed_mz=None,
+    )
+
+    if full_sequence:
+        swt_object = swt_object.annotate_proforma(
+            proforma_str = full_sequence,
+            fragment_tol_mass = 10, # We consider two peaks (actual and theoretical) "equivalent" if they are within +/- 0.01 Th
+            fragment_tol_mode = 'ppm',
+            ion_types = 'by',
+            max_ion_charge = max(1, precursor_charge - 1)
+        )
+    return swt_object

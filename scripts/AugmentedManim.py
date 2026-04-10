@@ -74,7 +74,7 @@ EXAMPLE_TARGET_WINDOW = (
     EXAMPLE_TARGET_MZ - ISOLATION_WINDOW_HALF_WIDTH,
     EXAMPLE_TARGET_MZ + ISOLATION_WINDOW_HALF_WIDTH,
 )
-EXAMPLE_TARGET_CYCLES = (1, 5, 9, 13, 17)
+EXAMPLE_TARGET_CYCLES = (1, 5, 9, 13, 17) 
 
 # Fixed x-axis range for the left graph — never changes.
 X_AXIS_MIN = 300.0
@@ -131,6 +131,20 @@ class AugmentedManim(Scene):
         self.play(Create(l_frame), Create(r_frame), run_time=1.5)
         self.wait(0.5)
 
+        # ── Persistent Brackets ───────────────────────────────────────
+        # MS1 bracket stays fixed since the MS1 range is always the same.
+        ms1_rect_ref = self._mz_rect(MS1_MZ_MIN, MS1_MZ_MAX, lo, GW, GH)
+        ms1_bracket = BraceBetweenPoints(ms1_rect_ref.get_corner(UL), ms1_rect_ref.get_corner(UR), direction=UP)
+        ms1_bracket_lbl = ms1_bracket.get_text("1 MS1 per cycle").set_color(BLUE).set_font_size(14)
+        
+        # MS2 bracket will be transformed each phase to slide into the new position.
+        first_p = INTERLEAVED_PHASES[0]
+        ms2_rect_ref = self._mz_rect(first_p["window_min_mz"], first_p["window_max_mz"], lo, GW, GH)
+        ms2_bracket = BraceBetweenPoints(ms2_rect_ref.get_corner(UL), ms2_rect_ref.get_corner(UR), direction=UP)
+        ms2_bracket_lbl = ms2_bracket.get_text(f"{MS2_PER_CYCLE} MS2 per cycle").set_color(RED).set_font_size(14)
+
+        self.play(FadeIn(ms1_bracket, ms1_bracket_lbl, ms2_bracket, ms2_bracket_lbl))
+
         # ── RT-graph geometry (proportional to scan count) ────────────
         # Each scan in the cycle gets one unit of RT-axis width.
         # 8 cycles × 39 scans/cycle = 312 scans total.
@@ -144,7 +158,7 @@ class AugmentedManim(Scene):
 
         for ci, phase in enumerate(phases):
             fast = ci >= 1
-            t = 0.15 if fast else 0.7
+            t = 0.45 if fast else 0.7
 
             # ────────────────────────────────────────────────────────
             # MS1 SCAN  (blue)
@@ -163,6 +177,7 @@ class AugmentedManim(Scene):
             )
 
             self.play(FadeIn(lbl_ms1_min, lbl_ms1_max, ms1_rect), run_time=t)
+            
             self.play(FadeIn(bars_ms1), run_time=t)
             self.play(FadeOut(bars_ms1), run_time=t)
 
@@ -192,6 +207,16 @@ class AugmentedManim(Scene):
             ms2_rect = self._mz_rect(
                 p_min, p_max, lo, GW, GH,
                 fill_color=RED, fill_opacity=0.08,
+            )
+            # Update the MS2 bracket position by sliding it to the new range.
+            new_ms2_rect = self._mz_rect(p_min, p_max, lo, GW, GH)
+            new_ms2_bracket = BraceBetweenPoints(new_ms2_rect.get_corner(UL), new_ms2_rect.get_corner(UR), direction=UP)
+            
+            lbl_ms2_min, lbl_ms2_max = self._range_labels(p_min, p_max, lo, GW)
+
+            ms2_rect = self._mz_rect(
+                p_min, p_max, lo, GW, GH,
+                fill_color=RED, fill_opacity=0.08,
                 stroke_color=RED, stroke_width=1.5,
             )
 
@@ -214,7 +239,12 @@ class AugmentedManim(Scene):
                 )
                 sub_bars.add(sb)
 
-            self.play(FadeIn(lbl_ms2_min, lbl_ms2_max, ms2_rect), run_time=t)
+            self.play(
+                FadeIn(lbl_ms2_min, lbl_ms2_max, ms2_rect),
+                ms2_bracket.animate.become(new_ms2_bracket),
+                ms2_bracket_lbl.animate.next_to(new_ms2_bracket, UP, buff=SMALL_BUFF),
+                run_time=t
+            )
 
             if not fast:
                 for i in range(MS2_PER_CYCLE):
@@ -239,6 +269,7 @@ class AugmentedManim(Scene):
             )
             rt_x_cursor += ms2_block_w
 
+        self.play(FadeOut(ms1_bracket, ms1_bracket_lbl, ms2_bracket, ms2_bracket_lbl))
         self.wait(2)
 
     # ── coordinate helpers ────────────────────────────────────────────
