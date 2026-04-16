@@ -424,7 +424,6 @@ def plot_and_show_statistics_for_collisions(mzml_path, max_spectra=None):
     plt.show()
 
 
-# @title Proving Similarity preservation empirically 
 def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.04, hash_buckets = 10000, max_spectra=300, 
                                                        spectra_idx_to_compare=None, k_means=None):
     import mmh3
@@ -722,21 +721,17 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
 
     # Replace print statements with display for pretty printing
     display(Markdown(f"""
----
-### SIMILARITY PRESERVATION METRICS
----
 - **Pearson correlation**:  {pearson_corr:.4f} (p-value: {pearson_pval:.2e})
 - **Adjusted Rand Index (independent KMeans on UMAP spaces)**: {ari_score:.4f}
 - **Number of pairwise comparisons**: {len(sparse_upper):,}
 - **Mean absolute error**: {np.mean(np.abs(sparse_upper - hash_upper)):.4f}
----
 """))
 
     # Top row: Scatter plot comparing similarities
     ax_scatter = fig.add_subplot(gs[0, :])
     ax_scatter.scatter(sparse_upper, hash_upper, alpha=0.3, s=10, edgecolors='none')
-    lower_bound = min(0.0, float(np.min(sparse_upper)), float(np.min(hash_upper)))
-    upper_bound = max(1.0, float(np.max(sparse_upper)), float(np.max(hash_upper)))
+    lower_bound = 0.0 
+    upper_bound = 1.0
     ax_scatter.plot([lower_bound, upper_bound], [lower_bound, upper_bound], 'r--', linewidth=2, label='Perfect preservation')
     ax_scatter.set_xlabel('Unhashed (Sparse) Cosine Similarity', fontsize=12)
     ax_scatter.set_ylabel('Hashed Cosine Similarity', fontsize=12)
