@@ -22,7 +22,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import RobustScaler
 from sklearn.manifold import TSNE
 
-
+import SpectrumWithTransformations
 
 try:
     import plotly.tools as tls
@@ -770,6 +770,24 @@ def prove_similarity_preservation_plots_and_statistics(mzml_path, bin_width = 0.
         ax.set_ylabel('Dim2')
         ax.grid(alpha=0.25)
 
+        from matplotlib.lines import Line2D
+
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', label='HNGPEHWHKDFPIANGER',
+                markerfacecolor='#e377c3', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='RMVNNGHSFNVEYDDSQDK',
+                markerfacecolor='#9edbe5', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='MVNNGHSFNVEYDDSQDKAVLK',
+                markerfacecolor='#2d9d2c', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='SHHWGYGK',
+                markerfacecolor='#bcbd22', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='QSPVDIDTK',
+                markerfacecolor='#1e78b4', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='LVQFHFHWGSSDDQGSEHTVDRK',
+                markerfacecolor='#9567bd', markersize=8),
+        ]
+        ax.legend(handles=legend_elements, title="Peptide Key", loc='center')
+
     plot_with_shared_colors(axes[0], Xs2, centers_s, labels_shared, out_s,
                             f'Unhashed UMAP - {N_CLUSTERS} reference clusters')
     plot_with_shared_colors(axes[1], Xh2, centers_h, labels_shared, out_h,
@@ -806,3 +824,49 @@ def plot_theoretical_ions(b_mz, y_mz, peptide):
         ax.text(x, h + 0.02, f"y{j}", rotation=90, ha="center", va="bottom", fontsize=8)
 
     plt.show()
+
+# This function should read in an mzml file and return an object of type SpectrumWithTransformations
+# Based off of get_MS2_object from Sam Payne lesson 4
+def get_SWT_object(
+    mzml_path: str,
+    scan_number: int,
+    full_sequence = None,
+) -> "SpectrumWithTransformations":
+    
+    index = scan_number -1 #scan_number is 1-based, index is 0-based
+    with mzml.MzML(mzml_path, use_index=True) as reader: #use_index=True allows us to avoid reading through the entire mzml file
+        selected_spectrum = reader.get_by_index(index)
+    # Test to see if we accessed the correct scan: PASSED!
+    # precursor_mz = selected_spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
+    # print(precursor_mz)
+    
+    # This finds the cooresponding values in the .mzml file to create our MS2 for a given scan (see the params)
+    spectrum_id = selected_spectrum['id']
+    retention_time = selected_spectrum['scanList']['scan'][0]['scan start time']
+    precursor_mz = selected_spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
+    precursor_charge = int(selected_spectrum['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]['charge state'])
+    mz_array = np.asarray(selected_spectrum['m/z array'])
+    intensity_array = np.asarray(selected_spectrum['intensity array'])
+    
+    swt_object = SpectrumWithTransformations.SpectrumWithTransformations(
+        identifier=spectrum_id,
+        scan_number=scan_number,
+        precursor_mz=precursor_mz,
+        precursor_charge=precursor_charge,
+        mz_array=mz_array,
+        intensity_array=intensity_array,
+        retention_time=retention_time,
+        annotation_dictionary=None,
+        binned_mz=None,
+        hashed_mz=None,
+    )
+
+    if full_sequence:
+        swt_object = swt_object.annotate_proforma(
+            proforma_str = full_sequence,
+            fragment_tol_mass = 10, # We consider two peaks (actual and theoretical) "equivalent" if they are within +/- 0.01 Th
+            fragment_tol_mode = 'ppm',
+            ion_types = 'by',
+            max_ion_charge = max(1, precursor_charge - 1)
+        )
+    return swt_object
