@@ -132,18 +132,25 @@ class AugmentedManim(Scene):
         self.wait(0.5)
 
         # ── Persistent Brackets ───────────────────────────────────────
-        # MS1 bracket stays fixed since the MS1 range is always the same.
-        ms1_rect_ref = self._mz_rect(MS1_MZ_MIN, MS1_MZ_MAX, lo, GW, GH)
-        ms1_bracket = BraceBetweenPoints(ms1_rect_ref.get_corner(UL), ms1_rect_ref.get_corner(UR), direction=UP)
-        ms1_bracket_lbl = ms1_bracket.get_text("1 MS1 per cycle").set_color(BLUE).set_font_size(14)
-        
-        # MS2 bracket will be transformed each phase to slide into the new position.
-        first_p = INTERLEAVED_PHASES[0]
-        ms2_rect_ref = self._mz_rect(first_p["window_min_mz"], first_p["window_max_mz"], lo, GW, GH)
-        ms2_bracket = BraceBetweenPoints(ms2_rect_ref.get_corner(UL), ms2_rect_ref.get_corner(UR), direction=UP)
-        ms2_bracket_lbl = ms2_bracket.get_text(f"{MS2_PER_CYCLE} MS2 per cycle").set_color(RED).set_font_size(14)
+        # Keep one fixed brace for the MS1 survey range and a second moving
+        # brace that explains which DIA phase is currently being fragmented.
+        ms1_bracket_group = self._mz_bracket(
+            MS1_MZ_MIN,
+            MS1_MZ_MAX,
+            lo,
+            GW,
+            GH,
+            label="MS1 survey scan range",
+            color=BLUE,
+            direction=UP,
+            vertical_shift=UP * 0.6,
+            label_direction=UP,
+        )
 
-        self.play(FadeIn(ms1_bracket, ms1_bracket_lbl, ms2_bracket, ms2_bracket_lbl))
+        first_p = INTERLEAVED_PHASES[0]
+        # ms2_bracket_group = self._phase_bracket(first_p, lo, GW, GH)
+
+        self.play(FadeIn(ms1_bracket_group))
 
         # ── RT-graph geometry (proportional to scan count) ────────────
         # Each scan in the cycle gets one unit of RT-axis width.
@@ -207,18 +214,9 @@ class AugmentedManim(Scene):
             ms2_rect = self._mz_rect(
                 p_min, p_max, lo, GW, GH,
                 fill_color=RED, fill_opacity=0.08,
-            )
-            # Update the MS2 bracket position by sliding it to the new range.
-            new_ms2_rect = self._mz_rect(p_min, p_max, lo, GW, GH)
-            new_ms2_bracket = BraceBetweenPoints(new_ms2_rect.get_corner(UL), new_ms2_rect.get_corner(UR), direction=UP)
-            
-            lbl_ms2_min, lbl_ms2_max = self._range_labels(p_min, p_max, lo, GW)
-
-            ms2_rect = self._mz_rect(
-                p_min, p_max, lo, GW, GH,
-                fill_color=RED, fill_opacity=0.08,
                 stroke_color=RED, stroke_width=1.5,
             )
+            new_ms2_bracket_group = self._phase_bracket(phase, lo, GW, GH)
 
             # 38 sub-rects at actual isolation-window m/z positions.
             subs = VGroup()
@@ -241,10 +239,10 @@ class AugmentedManim(Scene):
 
             self.play(
                 FadeIn(lbl_ms2_min, lbl_ms2_max, ms2_rect),
-                ms2_bracket.animate.become(new_ms2_bracket),
-                ms2_bracket_lbl.animate.next_to(new_ms2_bracket, UP, buff=SMALL_BUFF),
+                FadeIn(new_ms2_bracket_group),
                 run_time=t
             )
+            ms2_bracket_group = new_ms2_bracket_group
 
             if not fast:
                 for i in range(MS2_PER_CYCLE):
@@ -263,13 +261,13 @@ class AugmentedManim(Scene):
 
             ms2_left_group = VGroup(ms2_rect, subs)
             self.play(
-                FadeOut(lbl_ms2_min, lbl_ms2_max),
+                FadeOut(lbl_ms2_min, lbl_ms2_max, ms2_bracket_group),
                 ReplacementTransform(ms2_left_group, rt_ms2_group),
                 run_time=t * 1.5,
             )
             rt_x_cursor += ms2_block_w
 
-        self.play(FadeOut(ms1_bracket, ms1_bracket_lbl, ms2_bracket, ms2_bracket_lbl))
+        self.play(FadeOut(ms1_bracket_group))
         self.wait(2)
 
     # ── coordinate helpers ────────────────────────────────────────────
@@ -293,6 +291,54 @@ class AugmentedManim(Scene):
         w = x_r - x_l
         return Rectangle(width=w, height=GH, **rect_kwargs).move_to(
             [(x_l + x_r) / 2, lo[1] + GH / 2, 0]
+        )
+
+    def _mz_bracket(
+        self,
+        mz_min: float,
+        mz_max: float,
+        lo: np.ndarray,
+        GW: float,
+        GH: float,
+        label: str,
+        color,
+        direction=DOWN,
+        vertical_shift=ORIGIN,
+        label_direction=DOWN,
+    ) -> VGroup:
+        """Brace + label anchored to an m/z span just above the left plot."""
+        rect = self._mz_rect(mz_min, mz_max, lo, GW, GH)
+        brace = BraceBetweenPoints(
+            rect.get_corner(UL),
+            rect.get_corner(UR),
+            direction=direction,
+            buff=0.08,
+        ).set_color(color)
+        brace.shift(vertical_shift)
+        text = Text(label, font_size=14, color=color).next_to(
+            brace, label_direction, buff=0.08
+        )
+        return VGroup(brace, text)
+
+    def _phase_bracket(
+        self,
+        phase: dict,
+        lo: np.ndarray,
+        GW: float,
+        GH: float,
+    ) -> VGroup:
+        """Describe the active DIA phase and the span covered by its 38 windows."""
+        return self._mz_bracket(
+            phase["window_min_mz"],
+            phase["window_max_mz"],
+            lo,
+            GW,
+            GH,
+            label=f"Phase {phase['name']} DIA span ({MS2_PER_CYCLE} MS2 windows)",
+            color=RED,
+            direction=UP,
+            vertical_shift=UP*0.01,
+            label_direction=UP,
         )
 
     def _range_labels(
