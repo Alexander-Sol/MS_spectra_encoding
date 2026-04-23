@@ -229,7 +229,6 @@ class AugmentedManim(Scene):
 
             self.play(FadeIn(lbl_ms1_min, lbl_ms1_max, ms1_rect), run_time=t)
             self.play(FadeIn(bars_ms1), run_time=t)
-            self.play(FadeOut(bars_ms1), run_time=t)
 
             rt_ms1 = Rectangle(
                 width=ms1_block_w * 0.9, height=RH,
@@ -237,13 +236,20 @@ class AugmentedManim(Scene):
                 stroke_color=BLUE, stroke_width=1.0,
             ).move_to([rt_x_cursor + ms1_block_w / 2, ro[1], 0], aligned_edge=DOWN)
 
+            # Target peak-positions inside the RT MS1 block (same count as bars_ms1),
+            # so each left-graph peak slides horizontally into its RT slot.
+            target_bars_ms1 = self._peaks_in_rt_block(
+                bars_ms1, rt_x_cursor, ms1_block_w, ro, RH, color=BLUE,
+            )
+
             self.play(
                 FadeOut(lbl_ms1_min, lbl_ms1_max),
                 ReplacementTransform(ms1_rect, rt_ms1),
+                ReplacementTransform(bars_ms1, target_bars_ms1),
                 run_time=t * 1.5,
             )
             rt_x_cursor += ms1_block_w
-            rt_objects.add(rt_ms1)
+            rt_objects.add(rt_ms1, target_bars_ms1)
 
             # ────────────────────────────────────────────────────────
             # MS2 SCAN  (red) — full-height red box, random peaks inside,
@@ -310,24 +316,31 @@ class AugmentedManim(Scene):
                     self.play(FadeIn(target_extras), run_time=t * 0.7)
                     self.wait(0.15)
 
-            self.play(FadeOut(peaks_ms2), run_time=t * 0.5)
             if phase_b_note is not None:
                 self.play(FadeOut(phase_b_note), run_time=t * 0.5)
 
-            # ── RT MS2 block: full-height, peaks inside, optional target marker ──
+            # ── RT MS2 block: full-height, target marker, peaks are the
+            # same Line objects as peaks_ms2 (morphed into place below).
             ms2_has_target = phase["name"] == "B"
             rt_ms2_group = self._make_rt_ms2_block(
                 rt_x_cursor, ro, RH, ms2_block_w, scan_uw,
                 has_target=ms2_has_target,
                 target_frac=target_frac if ms2_has_target else None,
             )
+            # Build the per-peak target Lines so peaks_ms2 can morph into
+            # their slots in the RT block rather than being regenerated.
+            target_peaks_ms2 = self._peaks_in_rt_block(
+                peaks_ms2, rt_x_cursor, ms2_block_w, ro, RH, color=RED,
+            )
 
             left_ms2_group = VGroup(ms2_rect, *target_extras)
             self.play(
                 FadeOut(lbl_ms2_min, lbl_ms2_max, ms2_bracket_group),
                 ReplacementTransform(left_ms2_group, rt_ms2_group),
+                ReplacementTransform(peaks_ms2, target_peaks_ms2),
                 run_time=t * 1.5,
             )
+            rt_objects.add(target_peaks_ms2)
             # A/B/C/D phase letter above the MS2 block
             phase_letter = Text(
                 phase["name"], font_size=16, color=RED,
@@ -340,11 +353,11 @@ class AugmentedManim(Scene):
 
             if phase["name"] == "B":
                 # rt_ms2_group layout when has_target=True:
-                #   [0] outer rect, [1] peaks, [2] target marker
+                #   [0] outer rect, [1] target marker
                 phase_b_blocks.append({
                     "ms1": rt_ms1,
                     "ms2_group": rt_ms2_group,
-                    "target_marker": rt_ms2_group[2],
+                    "target_marker": rt_ms2_group[1],
                 })
 
         self.play(FadeOut(ms1_bracket_group))
@@ -554,6 +567,37 @@ class AugmentedManim(Scene):
             )
         return bars
 
+    def _peaks_in_rt_block(
+        self,
+        source_bars: VGroup,
+        x_start: float,
+        total_w: float,
+        ro: np.ndarray,
+        height: float,
+        color,
+    ) -> VGroup:
+        """Target Lines inside an RT block, one per peak in source_bars.
+
+        Peaks are spread uniformly across the block width while keeping
+        each source bar's original height, so a ReplacementTransform from
+        source_bars to the result makes the peaks slide horizontally.
+        """
+        n = len(source_bars)
+        margin = 0.04
+        xs = np.linspace(
+            x_start + total_w * margin,
+            x_start + total_w * (1 - margin),
+            max(n, 1),
+        )
+        target = VGroup()
+        for bar, x in zip(source_bars, xs):
+            h = bar.get_length()           # preserve each peak's height
+            target.add(Line(
+                [x, ro[1], 0], [x, ro[1] + h, 0],
+                stroke_width=1.0, color=color,
+            ))
+        return target
+
     # ── RT-graph block builder ────────────────────────────────────────
 
     def _make_rt_ms2_block(
@@ -566,12 +610,14 @@ class AugmentedManim(Scene):
         has_target: bool = False,
         target_frac: float = None,
     ) -> VGroup:
-        """Full-height red RT block with random peak lines and optional target marker.
+        """Full-height red RT block shell + optional target marker.
+
+        Peaks are NOT drawn here — the caller morphs them in from the
+        left-graph MS2 bars via ReplacementTransform.
 
         Group layout:
             [0] outer rect
-            [1] peak lines (VGroup)
-            [2] target marker  (only present when has_target=True)
+            [1] target marker  (only present when has_target=True)
         """
         cx = x_start + total_w / 2
 
@@ -584,22 +630,7 @@ class AugmentedManim(Scene):
             stroke_width=1.2,
         ).move_to([cx, ro[1], 0], aligned_edge=DOWN)
 
-        peaks = VGroup()
-        n_peaks = 14
-        x_lo = x_start + total_w * 0.04
-        x_hi = x_start + total_w * 0.96
-        xs = np.sort(np.random.uniform(x_lo, x_hi, n_peaks))
-        ys = np.random.exponential(0.3, n_peaks)
-        ys = np.clip(ys, 0.05, None)
-        ys /= ys.max()
-        for x, yf in zip(xs, ys):
-            h = height * yf * 0.8
-            peaks.add(Line(
-                [x, ro[1], 0], [x, ro[1] + h, 0],
-                stroke_width=1.0, color=WHITE,
-            ))
-
-        group = VGroup(outer, peaks)
+        group = VGroup(outer)
 
         if has_target and target_frac is not None:
             target_x = x_start + total_w * target_frac
