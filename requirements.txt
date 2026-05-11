@@ -9,3 +9,4 @@ scikit-learn
 scipy
 spectrum-utils
 nbformat>=4.2.0
+jinja2

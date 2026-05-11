@@ -284,7 +284,8 @@ def plot_MS2(ms2_spectrum, title=None, parent=None):
                 plotly_fig['layout']['title'] = f'MS2 Spectrum - Scan {extract_scan_number(ms2_spectrum.identifier)}'
             else:
                 plotly_fig['layout']['title'] = 'MS2 Spectrum'
-            plotly_fig.update_yaxes(range=[0, 1.05])  # Adjust y-axis range as needed
+            plotly_fig.update_yaxes(range=[0, 1.05])
+            plotly_fig.update_layout(showlegend=False)
             return plotly_fig
         except Exception:
             # If conversion fails for any reason, fall through to matplotlib fallback
