@@ -260,6 +260,467 @@ def get_MS1_object(mzml_path, scan, peptide = None):
     
     return None
 
+def get_lcms_map_region(mzml_path, rt_range, mz_range):
+    """Extract the LC-MS map region for a peptide feature as a flat point list.
+
+    Walks the MS1 scans of an mzML file and collects every peak whose retention
+    time falls in ``rt_range`` and whose m/z falls in ``mz_range``. This is the
+    raw (retention time, m/z, intensity) representation of an LC-MS map region --
+    the shared starting point for both the DeepIso image encoding and the
+    PointIso point-cloud encoding in notebook 05.
+
+    Parameters
+    ----------
+    mzml_path : str
+        Path to the mzML file (e.g. the committed DDA calibration file).
+    rt_range : (float, float)
+        Inclusive (low, high) retention-time window in minutes.
+    mz_range : (float, float)
+        Inclusive (low, high) m/z window.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per peak with columns ``scan`` (int MS1 scan number),
+        ``rt`` (float, minutes), ``mz`` (float), and ``intensity`` (float),
+        sorted by ``rt`` then ``mz``. Empty (zero-row) frame if nothing matches.
+    """
+    lo_rt, hi_rt = rt_range
+    lo_mz, hi_mz = mz_range
+
+    scans, rts, mzs, intensities = [], [], [], []
+    with pyteomics.mzml.read(mzml_path) as spectra:
+        for spectrum in spectra:
+            if spectrum.get('ms level', 0) != 1:
+                continue
+            rt = float(spectrum['scanList']['scan'][0]['scan start time'])
+            if rt < lo_rt or rt > hi_rt:
+                continue
+            scan = extract_scan_number(spectrum['id'])
+            mz = spectrum['m/z array']
+            intensity = spectrum['intensity array']
+            mask = (mz >= lo_mz) & (mz <= hi_mz)
+            n = int(mask.sum())
+            if n == 0:
+                continue
+            scans.append(np.full(n, scan, dtype=int))
+            rts.append(np.full(n, rt))
+            mzs.append(mz[mask])
+            intensities.append(intensity[mask])
+
+    if not scans:
+        return pd.DataFrame(columns=['scan', 'rt', 'mz', 'intensity'])
+
+    df = pd.DataFrame({
+        'scan': np.concatenate(scans),
+        'rt': np.concatenate(rts),
+        'mz': np.concatenate(mzs),
+        'intensity': np.concatenate(intensities),
+    })
+    return df.sort_values(['rt', 'mz']).reset_index(drop=True)
+
+
+def build_lcms_image(points, mz_bin=0.01, mz_range=None, max_intensity=None):
+    """Encode an LC-MS map region as a fixed-resolution 2D grayscale image (DeepIso).
+
+    This is the DeepIso (Zohora et al., 2019) encoding: the LC-MS map is binned
+    onto a fixed grid and every cell's intensity is squashed to a 0-255 grayscale
+    "pixel", exactly as a black-and-white image. The two axes use fixed precision:
+
+    * **RT axis (rows):** one row per MS1 scan (``RT -> 1 MS-scan``). Rows are
+      ordered by increasing retention time, so row 0 is the earliest scan.
+    * **m/z axis (columns):** fixed ``mz_bin`` bins (0.01 m/z in DeepIso). Peaks
+      landing in the same (scan, m/z-bin) cell have their intensities summed.
+
+    Fixing the resolution is the whole point of the comparison with PointIso: it
+    forces a grid whether or not real peaks are present, so most pixels end up
+    empty (see :func:`lcms_encoding_footprint`).
+
+    Parameters
+    ----------
+    points : pandas.DataFrame
+        Output of :func:`get_lcms_map_region` -- rows of ``scan``, ``rt``, ``mz``,
+        ``intensity``.
+    mz_bin : float, optional
+        Width of each m/z bin (column) in m/z units. Default ``0.01`` (DeepIso).
+    mz_range : (float, float), optional
+        Inclusive (low, high) m/z span for the columns. Defaults to the min/max
+        m/z of ``points``. Peaks outside the range are dropped.
+    max_intensity : float, optional
+        Intensity mapped to pixel value 255. Defaults to the max intensity in
+        ``points``. Pass an explicit value to scale several windows consistently.
+
+    Returns
+    -------
+    dict
+        ``image`` : 2D ``uint8`` array, shape ``(n_scans, n_mz_bins)``, 0-255.
+        ``rt_values`` : 1D array, the RT (min) of each row.
+        ``scan_values`` : 1D int array, the MS1 scan number of each row.
+        ``mz_edges`` : 1D array of length ``n_mz_bins + 1``, the m/z bin edges.
+        ``mz_bin`` : the bin width used.
+        ``max_intensity`` : the intensity mapped to 255.
+    """
+    cols = ['scan', 'rt', 'mz', 'intensity']
+    if points is None or len(points) == 0:
+        return {
+            'image': np.zeros((0, 0), dtype=np.uint8),
+            'rt_values': np.zeros(0),
+            'scan_values': np.zeros(0, dtype=int),
+            'mz_edges': np.zeros(0),
+            'mz_bin': mz_bin,
+            'max_intensity': 0.0,
+        }
+    df = points[cols]
+
+    if mz_range is None:
+        lo_mz, hi_mz = float(df['mz'].min()), float(df['mz'].max())
+    else:
+        lo_mz, hi_mz = float(mz_range[0]), float(mz_range[1])
+        df = df[(df['mz'] >= lo_mz) & (df['mz'] <= hi_mz)]
+
+    # m/z columns: fixed-width bins spanning [lo_mz, hi_mz].
+    n_mz = max(1, int(np.ceil((hi_mz - lo_mz) / mz_bin)))
+    mz_edges = lo_mz + mz_bin * np.arange(n_mz + 1)
+
+    # RT rows: one per MS1 scan, ordered by retention time.
+    scan_order = df[['scan', 'rt']].drop_duplicates().sort_values('rt')
+    scan_values = scan_order['scan'].to_numpy(dtype=int)
+    rt_values = scan_order['rt'].to_numpy(dtype=float)
+    row_of_scan = {s: i for i, s in enumerate(scan_values)}
+    n_scans = len(scan_values)
+
+    grid = np.zeros((n_scans, n_mz), dtype=float)
+    if len(df):
+        rows = df['scan'].map(row_of_scan).to_numpy(dtype=int)
+        col = np.floor((df['mz'].to_numpy() - lo_mz) / mz_bin).astype(int)
+        col = np.clip(col, 0, n_mz - 1)
+        np.add.at(grid, (rows, col), df['intensity'].to_numpy())
+
+    if max_intensity is None:
+        max_intensity = float(grid.max()) if grid.size else 0.0
+    if max_intensity > 0:
+        image = np.clip(np.round(grid / max_intensity * 255.0), 0, 255).astype(np.uint8)
+    else:
+        image = np.zeros_like(grid, dtype=np.uint8)
+
+    return {
+        'image': image,
+        'rt_values': rt_values,
+        'scan_values': scan_values,
+        'mz_edges': mz_edges,
+        'mz_bin': mz_bin,
+        'max_intensity': max_intensity,
+    }
+
+
+def lcms_point_cloud(points, mz_range=None):
+    """Encode an LC-MS map region as a (RT, m/z, intensity) point cloud (PointIso).
+
+    This is the PointIso (Zohora et al., 2021) encoding: instead of binning the
+    LC-MS map onto a fixed grid (see :func:`build_lcms_image`), every real peak is
+    kept as a single ``(retention time, m/z, intensity)`` triplet at its measured
+    coordinates. There is **no binning** -- the m/z and RT axes keep their full
+    precision, and only positions where a peak was actually observed are stored.
+
+    That is the whole contrast with the DeepIso image: the image spends memory on
+    a dense grid of mostly-empty pixels at a fixed resolution, while the point
+    cloud stores only the handful of real peaks at arbitrary precision (and, in the
+    4D TimsTOF extension, extends naturally to a fourth ion-mobility coordinate).
+    See :func:`lcms_encoding_footprint` for the side-by-side sparsity/memory story.
+
+    Parameters
+    ----------
+    points : pandas.DataFrame
+        Output of :func:`get_lcms_map_region` -- rows of ``scan``, ``rt``, ``mz``,
+        ``intensity``.
+    mz_range : (float, float), optional
+        Inclusive (low, high) m/z span. Defaults to the full range of ``points``.
+        Peaks outside the range are dropped, matching :func:`build_lcms_image` so
+        the two encodings describe exactly the same window.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float array of shape ``(n_points, 3)`` with columns ``[rt, mz,
+        intensity]``, one row per real peak, sorted by ``rt`` then ``mz``. Empty
+        ``(0, 3)`` array if ``points`` is empty.
+    """
+    if points is None or len(points) == 0:
+        return np.zeros((0, 3), dtype=float)
+
+    df = points[['rt', 'mz', 'intensity']]
+    if mz_range is not None:
+        lo_mz, hi_mz = float(mz_range[0]), float(mz_range[1])
+        df = df[(df['mz'] >= lo_mz) & (df['mz'] <= hi_mz)]
+
+    if len(df) == 0:
+        return np.zeros((0, 3), dtype=float)
+
+    df = df.sort_values(['rt', 'mz'])
+    return df.to_numpy(dtype=float)
+
+
+def lcms_encoding_footprint(image, cloud):
+    """Compare the DeepIso image and PointIso point cloud on sparsity and memory.
+
+    This is the core takeaway of notebook 05, quantified: for the *same* LC-MS
+    window, how much of the fixed-resolution image is actually empty, and how many
+    bytes does each encoding cost? The image (see :func:`build_lcms_image`) spends
+    one pixel per (scan, m/z-bin) cell whether or not a peak is there; the point
+    cloud (see :func:`lcms_point_cloud`) stores only real peaks. The punchline is
+    that a high-resolution window is ~300,000 pixels but only a few thousand real
+    points, so the vast majority of the image is empty space.
+
+    Parameters
+    ----------
+    image : dict
+        Output of :func:`build_lcms_image` (uses the ``image`` 2D ``uint8`` array).
+    cloud : numpy.ndarray
+        Output of :func:`lcms_point_cloud` -- ``(n_points, 3)`` float array.
+
+    Returns
+    -------
+    dict
+        ``n_pixels`` : total grid cells in the image (n_scans x n_mz_bins).
+        ``n_filled`` : image cells with a non-zero pixel (a real peak landed there).
+        ``n_empty`` : image cells that are zero (wasted on empty space).
+        ``fill_fraction`` : ``n_filled / n_pixels`` (0-1); ``sparsity`` is 1 minus it.
+        ``sparsity`` : fraction of the image that is empty.
+        ``n_points`` : number of real peaks in the point cloud.
+        ``image_bytes`` : bytes to store the dense ``uint8`` image grid.
+        ``point_cloud_bytes`` : bytes to store the ``(n_points, 3)`` float triplets.
+        ``memory_ratio`` : ``image_bytes / point_cloud_bytes`` (image / point cloud).
+    """
+    grid = np.asarray(image['image']) if isinstance(image, dict) else np.asarray(image)
+    cloud = np.asarray(cloud, dtype=float)
+    if cloud.ndim != 2 or cloud.shape[1] != 3:
+        cloud = cloud.reshape(-1, 3) if cloud.size else np.zeros((0, 3))
+
+    n_pixels = int(grid.size)
+    n_filled = int(np.count_nonzero(grid))
+    n_empty = n_pixels - n_filled
+    fill_fraction = (n_filled / n_pixels) if n_pixels else 0.0
+
+    n_points = int(len(cloud))
+    image_bytes = int(grid.nbytes)
+    point_cloud_bytes = int(cloud.nbytes)
+    memory_ratio = (image_bytes / point_cloud_bytes) if point_cloud_bytes else float('inf')
+
+    return {
+        'n_pixels': n_pixels,
+        'n_filled': n_filled,
+        'n_empty': n_empty,
+        'fill_fraction': fill_fraction,
+        'sparsity': 1.0 - fill_fraction,
+        'n_points': n_points,
+        'image_bytes': image_bytes,
+        'point_cloud_bytes': point_cloud_bytes,
+        'memory_ratio': memory_ratio,
+    }
+
+
+def plot_lcms_heatmap(image, title=None, frame=None):
+    """Plot a DeepIso LC-MS image as an RT x m/z heatmap (intensity -> pixel 0-255).
+
+    Renders the fixed-resolution grid produced by :func:`build_lcms_image`: each
+    row is one MS1 scan (RT axis), each column is a fixed m/z bin, and the cell
+    value is the 0-255 grayscale "pixel". Retention time (minutes) is used for the
+    y-axis and m/z-bin centers for the x-axis so the picture is readable, while the
+    pixel values are exactly what the DeepIso CNN would ingest.
+
+    Optionally overlays the DeepIso **[15 scans x 211 m/z bins]** framing window as a
+    rectangle, so the notebook can show how the model slides a fixed frame across
+    the map. Prefers Plotly (interactive), falling back to matplotlib -- matching
+    the rest of ``util.py``.
+
+    Parameters
+    ----------
+    image : dict
+        Output of :func:`build_lcms_image` (keys ``image``, ``rt_values``,
+        ``mz_edges``, ``mz_bin``, ...).
+    title : str, optional
+        Plot title. Defaults to a description of the window size.
+    frame : bool or dict, optional
+        Overlay the DeepIso framing window. ``True`` draws a default
+        [15 x 211] frame centered on the brightest pixel. A dict may override:
+
+        * ``n_scans`` (int, default 15) -- frame height in MS1 scans (rows).
+        * ``n_mz_bins`` (int, default 211) -- frame width in m/z bins (columns).
+        * ``row0`` (int) -- top row of the frame; defaults to centering on the
+          brightest pixel's row.
+        * ``col0`` (int) -- left column of the frame; defaults to centering on the
+          brightest pixel's column.
+
+    Returns
+    -------
+    plotly.graph_objs.Figure or matplotlib.figure.Figure
+        Interactive Plotly heatmap if Plotly is available, else a matplotlib figure.
+    """
+    grid = np.asarray(image['image'])
+    rt_values = np.asarray(image['rt_values'], dtype=float)
+    mz_edges = np.asarray(image['mz_edges'], dtype=float)
+    mz_bin = float(image.get('mz_bin', 0.01))
+    n_scans, n_mz = grid.shape if grid.ndim == 2 else (0, 0)
+    mz_centers = (mz_edges[:-1] + mz_edges[1:]) / 2 if len(mz_edges) >= 2 else np.zeros(0)
+
+    if title is None:
+        title = f'DeepIso LC-MS image ({n_scans} scans x {n_mz} m/z bins @ {mz_bin} m/z)'
+
+    # Resolve the optional [n_scans x n_mz_bins] framing window into a rectangle.
+    frame_rect = None
+    if frame and n_scans and n_mz:
+        opts = frame if isinstance(frame, dict) else {}
+        fr_scans = int(opts.get('n_scans', 15))
+        fr_bins = int(opts.get('n_mz_bins', 211))
+        if grid.size:
+            peak_row, peak_col = np.unravel_index(int(np.argmax(grid)), grid.shape)
+        else:
+            peak_row, peak_col = 0, 0
+        row0 = int(opts.get('row0', peak_row - fr_scans // 2))
+        col0 = int(opts.get('col0', peak_col - fr_bins // 2))
+        row0 = int(np.clip(row0, 0, max(0, n_scans - 1)))
+        col0 = int(np.clip(col0, 0, max(0, n_mz - 1)))
+        row1 = min(n_scans - 1, row0 + fr_scans - 1)
+        col1 = min(n_mz - 1, col0 + fr_bins - 1)
+        frame_rect = {
+            'y0': rt_values[row0], 'y1': rt_values[row1],
+            'x0': mz_edges[col0], 'x1': mz_edges[col1 + 1],
+            'n_scans': fr_scans, 'n_mz_bins': fr_bins,
+        }
+
+    try:
+        import plotly.graph_objects as go
+        fig = go.Figure(data=go.Heatmap(
+            z=grid,
+            x=mz_centers,
+            y=rt_values,
+            colorscale='Greys',
+            reversescale=True,
+            zmin=0, zmax=255,
+            colorbar=dict(title='pixel (0-255)'),
+            hovertemplate='m/z: %{x:.3f}<br>RT: %{y:.3f} min<br>pixel: %{z}<extra></extra>',
+        ))
+        if frame_rect is not None:
+            fig.add_shape(
+                type='rect',
+                x0=frame_rect['x0'], x1=frame_rect['x1'],
+                y0=frame_rect['y0'], y1=frame_rect['y1'],
+                line=dict(color='#D32F2F', width=2),
+                fillcolor='rgba(0,0,0,0)',
+            )
+            fig.add_annotation(
+                x=frame_rect['x1'], y=frame_rect['y1'],
+                text=f"[{frame_rect['n_scans']} x {frame_rect['n_mz_bins']}] frame",
+                showarrow=False, font=dict(color='#D32F2F', size=11),
+                xanchor='right', yanchor='bottom',
+            )
+        fig.update_layout(
+            title=title,
+            xaxis_title='m/z',
+            yaxis_title='Retention time (min)',
+            plot_bgcolor='white',
+        )
+        return fig
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            'Plotly unavailable for plot_lcms_heatmap; falling back to matplotlib'
+        )
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(8, 6))
+        if grid.size and len(mz_edges) >= 2 and len(rt_values):
+            extent = [mz_edges[0], mz_edges[-1], rt_values[-1], rt_values[0]]
+            ax.imshow(grid, aspect='auto', cmap='gray_r', vmin=0, vmax=255,
+                      extent=extent, interpolation='nearest')
+        if frame_rect is not None:
+            import matplotlib.patches as mpatches
+            ax.add_patch(mpatches.Rectangle(
+                (frame_rect['x0'], min(frame_rect['y0'], frame_rect['y1'])),
+                frame_rect['x1'] - frame_rect['x0'],
+                abs(frame_rect['y1'] - frame_rect['y0']),
+                fill=False, edgecolor='#D32F2F', linewidth=2,
+            ))
+        ax.set_xlabel('m/z')
+        ax.set_ylabel('Retention time (min)')
+        ax.set_title(title)
+        fig.tight_layout()
+        return fig
+
+
+def plot_lcms_point_cloud(cloud, title=None):
+    """Plot a PointIso LC-MS point cloud as a 3D (m/z, RT, intensity) scatter.
+
+    Renders the arbitrary-precision triplets produced by
+    :func:`lcms_point_cloud`: one marker per real peak at its measured
+    ``(m/z, retention time, intensity)``, with no binning. Markers are colored by
+    intensity. This is the visual counterpart to :func:`plot_lcms_heatmap` -- the
+    same feature, stored as sparse points instead of a dense grid. Prefers Plotly
+    (interactive 3D), falling back to a matplotlib 3D scatter.
+
+    Parameters
+    ----------
+    cloud : numpy.ndarray
+        ``(n_points, 3)`` array of ``[rt, mz, intensity]`` rows, as returned by
+        :func:`lcms_point_cloud`.
+    title : str, optional
+        Plot title. Defaults to a description including the point count.
+
+    Returns
+    -------
+    plotly.graph_objs.Figure or matplotlib.figure.Figure
+        Interactive Plotly 3D scatter if Plotly is available, else matplotlib.
+    """
+    cloud = np.asarray(cloud, dtype=float)
+    if cloud.ndim != 2 or cloud.shape[1] != 3:
+        cloud = cloud.reshape(-1, 3) if cloud.size else np.zeros((0, 3))
+    rt, mz, intensity = cloud[:, 0], cloud[:, 1], cloud[:, 2]
+
+    if title is None:
+        title = f'PointIso point cloud ({len(cloud)} real peaks)'
+
+    try:
+        import plotly.graph_objects as go
+        fig = go.Figure(data=go.Scatter3d(
+            x=mz, y=rt, z=intensity,
+            mode='markers',
+            marker=dict(
+                size=3,
+                color=intensity,
+                colorscale='Viridis',
+                colorbar=dict(title='intensity'),
+                opacity=0.85,
+            ),
+            hovertemplate='m/z: %{x:.4f}<br>RT: %{y:.3f} min<br>intensity: %{z:.0f}<extra></extra>',
+        ))
+        fig.update_layout(
+            title=title,
+            scene=dict(
+                xaxis_title='m/z',
+                yaxis_title='Retention time (min)',
+                zaxis_title='intensity',
+            ),
+        )
+        return fig
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            'Plotly unavailable for plot_lcms_point_cloud; falling back to matplotlib'
+        )
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers 3d projection)
+        fig = plt.figure(figsize=(8, 6))
+        ax = fig.add_subplot(111, projection='3d')
+        if len(cloud):
+            sc = ax.scatter(mz, rt, intensity, c=intensity, cmap='viridis', s=8)
+            fig.colorbar(sc, ax=ax, shrink=0.6, label='intensity')
+        ax.set_xlabel('m/z')
+        ax.set_ylabel('Retention time (min)')
+        ax.set_zlabel('intensity')
+        ax.set_title(title)
+        fig.tight_layout()
+        return fig
+
+
 def plot_MS2(ms2_spectrum, title=None, parent=None):
     """Plot an MS2 spectrum. Prefer converting the matplotlib figure to Plotly
     if plotly.tools.mpl_to_plotly is available, otherwise fall back to
