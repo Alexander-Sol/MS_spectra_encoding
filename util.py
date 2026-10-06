@@ -171,7 +171,7 @@ def get_MS2_object(mzml_path, scan, peptide = None):
 
                 # Process the spectrum
                 su_spectrum = (su_spectrum.filter_intensity(0.05, 50)
-                            .remove_precursor_peak(fragment_tol_mass=10, fragment_tol_mode='ppm') # used to be 0.5, Da
+                            .remove_precursor_peak(fragment_tol_mass=20, fragment_tol_mode='ppm') # used to be 0.5, Da
                             .scale_intensity('root'))
                 break
     # Formatting
