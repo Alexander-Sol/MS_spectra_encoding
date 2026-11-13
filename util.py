@@ -647,7 +647,7 @@ def plot_lcms_heatmap(image, title=None, frame=None):
         return fig
 
 
-def plot_lcms_point_cloud(cloud, title=None):
+def plot_lcms_point_cloud(cloud, title=None, sticks=False):
     """Plot a PointIso LC-MS point cloud as a 3D (m/z, RT, intensity) scatter.
 
     Renders the arbitrary-precision triplets produced by
@@ -664,6 +664,10 @@ def plot_lcms_point_cloud(cloud, title=None):
         :func:`lcms_point_cloud`.
     title : str, optional
         Plot title. Defaults to a description including the point count.
+    sticks : bool, optional
+        If True, draw each peak as a vertical stick rising from the m/z x RT plane
+        (intensity 0) up to its intensity -- the familiar centroided-spectrum look,
+        repeated across every MS1 scan. Default False (markers only).
 
     Returns
     -------
@@ -674,30 +678,49 @@ def plot_lcms_point_cloud(cloud, title=None):
     if cloud.ndim != 2 or cloud.shape[1] != 3:
         cloud = cloud.reshape(-1, 3) if cloud.size else np.zeros((0, 3))
     rt, mz, intensity = cloud[:, 0], cloud[:, 1], cloud[:, 2]
+    i_max = float(intensity.max()) if len(intensity) else 1.0
 
     if title is None:
         title = f'PointIso point cloud ({len(cloud)} real peaks)'
 
     try:
         import plotly.graph_objects as go
-        fig = go.Figure(data=go.Scatter3d(
+        traces = []
+        if sticks and len(cloud):
+            # All sticks in one line trace: (mz, rt, 0) -> (mz, rt, I), split by NaN gaps.
+            n = len(cloud)
+            gap = np.full(n, np.nan)
+            traces.append(go.Scatter3d(
+                x=np.column_stack([mz, mz, gap]).ravel(),
+                y=np.column_stack([rt, rt, gap]).ravel(),
+                z=np.column_stack([np.zeros(n), intensity, gap]).ravel(),
+                mode='lines',
+                line=dict(width=3, color=np.repeat(intensity, 3),
+                          colorscale='Viridis', cmin=0, cmax=i_max),
+                hoverinfo='skip',
+                showlegend=False,
+            ))
+        traces.append(go.Scatter3d(
             x=mz, y=rt, z=intensity,
             mode='markers',
             marker=dict(
-                size=3,
+                size=2 if sticks else 3,
                 color=intensity,
                 colorscale='Viridis',
+                cmin=0, cmax=i_max,
                 colorbar=dict(title='intensity'),
                 opacity=0.85,
             ),
             hovertemplate='m/z: %{x:.4f}<br>RT: %{y:.3f} min<br>intensity: %{z:.0f}<extra></extra>',
+            showlegend=False,
         ))
+        fig = go.Figure(data=traces)
         fig.update_layout(
             title=title,
             scene=dict(
                 xaxis_title='m/z',
                 yaxis_title='Retention time (min)',
-                zaxis_title='intensity',
+                zaxis=dict(title='intensity', rangemode='tozero'),
             ),
         )
         return fig
@@ -711,7 +734,14 @@ def plot_lcms_point_cloud(cloud, title=None):
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111, projection='3d')
         if len(cloud):
-            sc = ax.scatter(mz, rt, intensity, c=intensity, cmap='viridis', s=8)
+            if sticks:
+                from mpl_toolkits.mplot3d.art3d import Line3DCollection
+                segs = [[(x, y, 0.0), (x, y, z)] for x, y, z in zip(mz, rt, intensity)]
+                ax.add_collection3d(Line3DCollection(
+                    segs, colors=plt.get_cmap('viridis')(intensity / i_max), linewidths=1.5))
+                ax.set_zlim(0, i_max * 1.05)
+            sc = ax.scatter(mz, rt, intensity, c=intensity, cmap='viridis',
+                            vmin=0, vmax=i_max, s=4 if sticks else 8)
             fig.colorbar(sc, ax=ax, shrink=0.6, label='intensity')
         ax.set_xlabel('m/z')
         ax.set_ylabel('Retention time (min)')
