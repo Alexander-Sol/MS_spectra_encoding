@@ -257,8 +257,111 @@ def get_MS1_object(mzml_path, scan, peptide = None):
                 )
                 
                 return fig
-    
+
     return None
+
+
+ISOTOPE_SPACING = 1.00335  # 13C - 12C mass difference (Da)
+ENVELOPE_COLORS = ['#0072B2', '#D55E00', '#009E73', '#CC79A7', '#E69F00', '#56B4E9']
+
+
+def find_isotope_envelope(mz, relative_intensity, approx_mz, charge,
+                          tol=0.01, min_rel_intensity=0.01):
+    """Return the indices of the peaks in one isotopic envelope.
+
+    Starts at the peak closest to approx_mz, then steps down and up in
+    increments of ISOTOPE_SPACING / charge, keeping peaks that fall within
+    tol (Da) of the expected position. Stepping stops at the first gap.
+    Only peaks with relative intensity >= min_rel_intensity are considered.
+    """
+    keep = np.where(relative_intensity >= min_rel_intensity)[0]
+    peaks_mz = mz[keep]
+    if len(peaks_mz) == 0:
+        return []
+
+    start = int(np.argmin(np.abs(peaks_mz - approx_mz)))
+    if abs(peaks_mz[start] - approx_mz) > 1.0:
+        return []
+
+    step = ISOTOPE_SPACING / charge
+    members = [start]
+    for direction in (-1, 1):
+        current = peaks_mz[start]
+        while True:
+            target = current + direction * step
+            nearest = int(np.argmin(np.abs(peaks_mz - target)))
+            if abs(peaks_mz[nearest] - target) > tol:
+                break
+            members.append(nearest)
+            current = peaks_mz[nearest]
+
+    return sorted(keep[i] for i in members)
+
+
+def plot_MS1_with_envelopes(mzml_path, scan, envelopes, tol=0.01):
+    """Plot an MS1 spectrum with isotopic envelopes highlighted by charge state.
+
+    Parameters:
+    -----------
+    mzml_path : str
+        Path to the mzML file
+    scan : int
+        Scan number to retrieve
+    envelopes : list of (approx_mz, charge) tuples
+        Approximate m/z of any peak in each envelope, and its charge,
+        e.g. [(852, 3), (487, 2)]
+    tol : float
+        Matching tolerance (Da) for each isotope peak
+
+    Returns:
+    --------
+    plotly.graph_objs.Figure
+    """
+    import plotly.graph_objects as go
+
+    fig = get_MS1_object(mzml_path, scan)
+    if fig is None:
+        return None
+
+    with pyteomics.mzml.read(mzml_path) as spectra:
+        for spectrum in spectra:
+            if extract_scan_number(spectrum['id']) == scan:
+                mz = spectrum['m/z array']
+                relative_intensity = spectrum['intensity array'] / np.max(spectrum['intensity array'])
+                break
+
+    for n, (approx_mz, charge) in enumerate(envelopes):
+        idx = find_isotope_envelope(mz, relative_intensity, approx_mz, charge, tol=tol)
+        if not idx:
+            import logging
+            logging.getLogger(__name__).warning(
+                f'No isotopic envelope found near m/z {approx_mz} (z={charge})')
+            continue
+
+        color = ENVELOPE_COLORS[n % len(ENVELOPE_COLORS)]
+        mono_mz = mz[idx[0]]
+        label = f'z={charge} (m/z {mono_mz:.2f})'
+
+        xs, ys = [], []
+        for i in idx:
+            xs += [mz[i], mz[i], None]
+            ys += [0, relative_intensity[i], None]
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys, mode='lines',
+            line=dict(color=color, width=2.5),
+            name=label,
+            hoverinfo='skip',
+        ))
+
+        apex = max(idx, key=lambda i: relative_intensity[i])
+        fig.add_annotation(
+            x=mz[apex], y=relative_intensity[apex],
+            text=f'z={charge}', showarrow=False, yshift=12,
+            font=dict(color=color, size=13),
+        )
+
+    fig.update_layout(showlegend=True, legend=dict(title='Isotopic envelopes'))
+    return fig
 
 def get_lcms_map_region(mzml_path, rt_range, mz_range):
     """Extract the LC-MS map region for a peptide feature as a flat point list.
@@ -795,7 +898,8 @@ def plot_MS2(ms2_spectrum, title=None, parent=None):
     except Exception:
         # As a last resort, return the Axes object so the caller can handle it
         return ax
-    
+
+
 def add_subplot(plotly_fig, fig, row, col, showlegend=False, **kwargs):
     """Add a plotly figure as a subplot to an existing plotly figure at the specified row and column."""
     for trace in fig.data:
