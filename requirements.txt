@@ -3,6 +3,7 @@ jinja2==3.1.6
 lxml==6.0.2
 matplotlib==3.10.6
 mmh3
+nbformat>=4.2.0
 numpy==2.2.6
 pandas==2.3.2
 plotly==5.18.0

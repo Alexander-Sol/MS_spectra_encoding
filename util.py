@@ -171,7 +171,7 @@ def get_MS2_object(mzml_path, scan, peptide = None):
 
                 # Process the spectrum
                 su_spectrum = (su_spectrum.filter_intensity(0.05, 50)
-                            .remove_precursor_peak(fragment_tol_mass=10, fragment_tol_mode='ppm') # used to be 0.5, Da
+                            .remove_precursor_peak(fragment_tol_mass=20, fragment_tol_mode='ppm') # used to be 0.5, Da
                             .scale_intensity('root'))
                 break
     # Formatting
@@ -878,7 +878,8 @@ def plot_MS2(ms2_spectrum, title=None, parent=None):
                 plotly_fig['layout']['title'] = f'MS2 Spectrum - Scan {extract_scan_number(ms2_spectrum.identifier)}'
             else:
                 plotly_fig['layout']['title'] = 'MS2 Spectrum'
-            plotly_fig.update_yaxes(range=[0, 1.05])  # Adjust y-axis range as needed
+            plotly_fig.update_yaxes(range=[0, 1.05])
+            plotly_fig.update_layout(showlegend=False)
             return plotly_fig
         except Exception:
             # If conversion fails for any reason, fall through to matplotlib fallback
