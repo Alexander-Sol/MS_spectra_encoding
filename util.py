@@ -370,7 +370,7 @@ def get_lcms_map_region(mzml_path, rt_range, mz_range):
     time falls in ``rt_range`` and whose m/z falls in ``mz_range``. This is the
     raw (retention time, m/z, intensity) representation of an LC-MS map region --
     the shared starting point for both the DeepIso image encoding and the
-    PointIso point-cloud encoding in notebook 05.
+    PointIso point-cloud encoding in notebook 06.
 
     Parameters
     ----------
@@ -396,7 +396,11 @@ def get_lcms_map_region(mzml_path, rt_range, mz_range):
         for spectrum in spectra:
             if spectrum.get('ms level', 0) != 1:
                 continue
-            rt = float(spectrum['scanList']['scan'][0]['scan start time'])
+            rt_raw = spectrum['scanList']['scan'][0]['scan start time']
+            rt = float(rt_raw)
+            # mzML may store RT in seconds (e.g. files written by pyopenms); work in minutes.
+            if getattr(rt_raw, 'unit_info', None) == 'second':
+                rt /= 60.0
             if rt < lo_rt or rt > hi_rt:
                 continue
             scan = extract_scan_number(spectrum['id'])
@@ -743,6 +747,128 @@ def plot_lcms_heatmap(image, title=None, frame=None):
                 abs(frame_rect['y1'] - frame_rect['y0']),
                 fill=False, edgecolor='#D32F2F', linewidth=2,
             ))
+        ax.set_xlabel('m/z')
+        ax.set_ylabel('Retention time (min)')
+        ax.set_title(title)
+        fig.tight_layout()
+        return fig
+
+
+def plot_lcms_map(points, mz_bin=1.0, title=None, highlight=None):
+    """Plot a whole LC-MS map as an RT x m/z heatmap of log10 intensity.
+
+    This is the "big picture" view of the MS1 data: every MS1 scan is one row
+    (retention time up the y-axis), m/z runs along the x-axis in ``mz_bin``-wide
+    bins, and color is the log10 of the summed intensity in each cell. The
+    orientation matches DeepIso (Zohora et al., 2019) and :func:`plot_lcms_heatmap`:
+    rows are MS1 scans, columns are m/z bins. Unlike
+    :func:`plot_lcms_heatmap` (a DeepIso-style 0.01 m/z, 0-255 image of one small
+    window), this view is meant for looking at an entire run, so it uses coarse m/z
+    bins and a log color scale -- MS1 intensities span several orders of magnitude,
+    and on a linear scale only the few brightest features would be visible.
+
+    Parameters
+    ----------
+    points : pandas.DataFrame
+        Output of :func:`get_lcms_map_region` -- rows of ``scan``, ``rt``, ``mz``,
+        ``intensity``. Pass a very wide window to get the full map.
+    mz_bin : float, optional
+        Width of each m/z bin (column) in m/z units. Default ``1.0``.
+    title : str, optional
+        Plot title. Defaults to a description of the map size.
+    highlight : dict, optional
+        Mark a feature on the map. Recognized keys (all optional):
+
+        * ``rt_range`` and ``mz_range`` -- (low, high) tuples; draws a box.
+        * ``point`` -- (rt, mz) tuple; draws an open-circle marker (e.g. the precursor).
+        * ``label`` -- text placed at the top-left corner of the box (or next to the point).
+
+    Returns
+    -------
+    plotly.graph_objs.Figure or matplotlib.figure.Figure
+        Interactive Plotly heatmap if Plotly is available, else a matplotlib figure.
+    """
+    highlight = highlight or {}
+    box = None  # in plot coordinates: x = m/z, y = RT
+    if 'rt_range' in highlight and 'mz_range' in highlight:
+        (y0, y1), (x0, x1) = highlight['rt_range'], highlight['mz_range']
+        box = dict(x0=x0, x1=x1, y0=y0, y1=y1)
+    point = highlight.get('point')  # given as (rt, mz); drawn at x = mz, y = rt
+    label = highlight.get('label')
+    hl_color = '#FF4081'  # magenta: stands out against Viridis and the black background
+
+    # Rows: one per MS1 scan, in RT order.
+    rt_values, row_idx = np.unique(points['rt'].to_numpy(dtype=float), return_inverse=True)
+    # Columns: fixed-width m/z bins.
+    mz = points['mz'].to_numpy(dtype=float)
+    lo_mz = np.floor(mz.min() / mz_bin) * mz_bin
+    n_mz = int(np.ceil((mz.max() - lo_mz) / mz_bin)) + 1
+    col_idx = np.clip(((mz - lo_mz) / mz_bin).astype(int), 0, n_mz - 1)
+    mz_centers = lo_mz + (np.arange(n_mz) + 0.5) * mz_bin
+
+    grid = np.zeros((len(rt_values), n_mz))
+    np.add.at(grid, (row_idx, col_idx), points['intensity'].to_numpy(dtype=float))
+    log_grid = np.where(grid > 0, np.log10(np.where(grid > 0, grid, 1.0)), np.nan)
+
+    if title is None:
+        title = (f'LC-MS map: {len(rt_values)} MS1 scans, '
+                 f'{mz_centers[0] - mz_bin / 2:.0f}-{mz_centers[-1] + mz_bin / 2:.0f} m/z '
+                 f'({mz_bin:g} m/z bins)')
+
+    try:
+        import plotly.graph_objects as go
+        fig = go.Figure(data=go.Heatmap(
+            z=log_grid,
+            x=mz_centers,
+            y=rt_values,
+            colorscale='Viridis',
+            colorbar=dict(title='log10<br>intensity'),
+            hovertemplate=('m/z: %{x:' + ('.1f' if mz_bin >= 0.1 else '.2f')
+                           + '}<br>RT: %{y:.3f} min<br>log10 intensity: %{z:.2f}<extra></extra>'),
+        ))
+        if box is not None:
+            fig.add_shape(type='rect', **box, line=dict(color=hl_color, width=2),
+                          fillcolor='rgba(0,0,0,0)')
+        if point is not None:
+            fig.add_trace(go.Scatter(
+                x=[point[1]], y=[point[0]], mode='markers', showlegend=False,
+                marker=dict(symbol='circle-open', size=14, color=hl_color, line=dict(width=2)),
+                hovertemplate='m/z: %{x:.4f}<br>RT: %{y:.3f} min<extra>highlight</extra>',
+            ))
+        if label:
+            lx, ly = (box['x0'], box['y1']) if box is not None else (point[1], point[0])
+            fig.add_annotation(x=lx, y=ly, text=label, showarrow=False,
+                               xanchor='left', yanchor='bottom',
+                               font=dict(color=hl_color, size=12))
+        fig.update_layout(
+            title=title,
+            xaxis_title='m/z',
+            yaxis_title='Retention time (min)',
+            plot_bgcolor='black',
+            height=600,
+        )
+        return fig
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            'Plotly unavailable for plot_lcms_map; falling back to matplotlib'
+        )
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(9, 6))
+        ax.set_facecolor('black')
+        mesh = ax.pcolormesh(mz_centers, rt_values, log_grid, cmap='viridis', shading='nearest')
+        fig.colorbar(mesh, ax=ax, label='log10 intensity')
+        if box is not None:
+            import matplotlib.patches as mpatches
+            ax.add_patch(mpatches.Rectangle(
+                (box['x0'], box['y0']), box['x1'] - box['x0'], box['y1'] - box['y0'],
+                fill=False, edgecolor=hl_color, linewidth=2,
+            ))
+        if point is not None:
+            ax.plot(point[1], point[0], 'o', mfc='none', mec=hl_color, ms=12, mew=2)
+        if label:
+            lx, ly = (box['x0'], box['y1']) if box is not None else (point[1], point[0])
+            ax.text(lx, ly, label, color=hl_color, va='bottom', ha='left')
         ax.set_xlabel('m/z')
         ax.set_ylabel('Retention time (min)')
         ax.set_title(title)
